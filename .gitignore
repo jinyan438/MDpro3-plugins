@@ -1,0 +1,25 @@
+# This repository only contains the MDPro3 launcher scripts and the plugin package.
+# Everything else of the workspace (game project, build output, update caches) stays out.
+/*
+!/.gitignore
+!/.gitattributes
+!/*.bat
+!/*.ps1
+!/plugins/
+!/plugins/**
+
+# Generated while the launcher runs (contain local paths, build signatures, logs).
+/plugins/.state/
+/plugins/.selfcheck/
+
+# Explicitly out of scope (already covered by the rule above, kept for clarity).
+/MDPro3/
+/Build/
+/Builds/
+/Android/
+/Library/
+/StandaloneWindows64/
+/hd-arts/
+/yggopro2-closeup/
+/mdpro3-sound/
+/.ssh/

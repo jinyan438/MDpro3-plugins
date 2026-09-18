@@ -1,0 +1,12 @@
+﻿{
+  "_comment": "MDPro3 plugin switches. Change a value and start the game again, no rebuild is needed. A feature that has no entry here is enabled.",
+  "features": [
+    {
+      "id": "releaseDateSort",
+      "enabled": true,
+      "note": "编辑卡组界面：排序里增加按卡片发布时间排序（升序 / 降序）"
+    }
+  ],
+  "logFeatureTicks": false,
+  "logEvents": false
+}
