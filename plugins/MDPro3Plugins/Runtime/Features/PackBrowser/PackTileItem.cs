@@ -22,28 +22,23 @@ namespace MDPro3.Plugins.Features.PackBrowser
     /// <summary>
     /// One tile of the pack browser grid.
     ///
-    /// The plate, the hover animation, the selection cursor and the sound come from the game's own
-    /// deck grid tile (UI/ItemDeck.prefab). Its deck specific content (deck case art and the three
-    /// fanned card slots) is hidden and replaced by the tile's own picture slots, because those
-    /// slots are not visible outside the deck selector's pickup state.
-    ///
-    /// Two picture slots are created once per tile and only one is active at a time:
-    ///   * "PackCoverArt" is a square slot filled through the game's ArtRawImageHandler.
-    ///   * "PackCardImage" is a card shaped slot filled through the game's CardRawImageHandler,
-    ///     which renders the whole card the same way the deck editor's card grid does it.
+    /// Reuses the game's deck tile input and sound. Pack covers get a tall foil wrapper;
+    /// pack contents retain the original complete card picture and deck tile decorations.
     /// </summary>
     public sealed class PackTileItem : SelectionToggle_ScrollRectItem
     {
         /// <summary>Tile size. The browser uses it as the grid pitch.</summary>
         public const float TileWidth = 240f;
         public const float TileHeight = 276f;
+        public const float PackTileWidth = 224f;
+        public const float PackTileHeight = 482f;
 
         private const float PictureHeight = 228f;
         private const float PictureTopInset = 6f;
 
         private const string LabelTitle = "TextDeckName";
 
-        /// <summary>Square artwork slot, used for the pack covers.</summary>
+        /// <summary>Artwork inside the foil wrapper, loaded from the original cover card.</summary>
         public const string ArtObjectName = "PackCoverArt";
 
         /// <summary>Card shaped slot, used for the cards of a pack.</summary>
@@ -79,12 +74,14 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private static bool soundsInherited;
 
         private PackBrowserOverlay owner;
-        private RectTransform artRect;
+        private PackWrapperVisual wrapper;
         private RectTransform cardRect;
         private ArtRawImageHandler art;
         private CardRawImageHandler cardPicture;
         private TextMeshProUGUI title;
         private PackTileContent shownContent = PackTileContent.Art;
+        private Transform deckBody;
+        private TextMeshProUGUI packTitle;
 
         /// <summary>Index in the list that is currently printed by the browser.</summary>
         public int EntryIndex { get; private set; }
@@ -126,6 +123,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         protected override void Awake()
         {
+            EnsureEvents();
             base.Awake();
 
             exclusiveToggle = true;
@@ -201,23 +199,41 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         #region Toggle visuals
 
-        // UI/ItemDeck.prefab has no "Offset" element, so the slide animation of the game scroll
-        // item cannot run. The game's own deck tile overrides the same four methods for that
-        // reason; the selection feedback comes from Hover / SelectCursor / ColorContainerGraphic.
+        // The deck prefab has no scroll-item "Offset". Keep its input state, without the slide.
         public override void ToggleOnNow()
         {
+            isOn = true;
+            wrapper?.SetHighlighted(true, true);
         }
 
         public override void ToggleOffNow()
         {
+            isOn = false;
+            // SuperScrollView calls this before rebinding a recycled tile.
+            ResetVisualState(true);
+            wrapper?.SetHighlighted(false, true);
         }
 
         protected override void ToggleOn()
         {
+            wrapper?.SetHighlighted(true);
         }
 
         protected override void ToggleOff()
         {
+            wrapper?.SetHighlighted(hoverd);
+        }
+
+        protected override void HoverOn()
+        {
+            base.HoverOn();
+            wrapper?.SetHighlighted(true);
+        }
+
+        protected override void HoverOff(bool force = false)
+        {
+            base.HoverOff(force);
+            wrapper?.SetHighlighted(isOn);
         }
 
         #endregion
@@ -239,7 +255,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
                 cardPicture.SetCard(code);
                 cardRect.gameObject.SetActive(true);
-                artRect.gameObject.SetActive(false);
+                wrapper.gameObject.SetActive(false);
             }
             else
             {
@@ -247,11 +263,21 @@ namespace MDPro3.Plugins.Features.PackBrowser
                     cardPicture.SetCard((Card)null);
 
                 art.SetArt(code);
-                artRect.gameObject.SetActive(true);
+                wrapper.gameObject.SetActive(true);
                 cardRect.gameObject.SetActive(false);
             }
 
             shownContent = content;
+
+            bool isPack = content == PackTileContent.Art;
+            ((RectTransform)transform).sizeDelta = isPack
+                ? new Vector2(PackTileWidth, PackTileHeight)
+                : new Vector2(TileWidth, TileHeight);
+            if (deckBody != null)
+                deckBody.gameObject.SetActive(!isPack);
+            packTitle.gameObject.SetActive(isPack);
+            packTitle.text = caption;
+            wrapper.SetHighlighted(isOn, true);
 
             if (title != null)
                 title.text = Trim(caption, 14);
@@ -263,11 +289,10 @@ namespace MDPro3.Plugins.Features.PackBrowser
         /// </summary>
         private void EnsurePictureSlots()
         {
-            if (artRect == null)
+            if (wrapper == null)
             {
-                // the artwork crop is square (624x624), so the cover slot is square
-                artRect = NewPicture(ArtObjectName, PictureHeight, PictureHeight);
-                art = artRect.gameObject.AddComponent<ArtRawImageHandler>();
+                wrapper = PackWrapperVisual.Create(transform);
+                art = wrapper.Art;
             }
 
             if (cardRect == null)
@@ -279,6 +304,31 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             if (title == null)
                 title = Manager.GetElement<TextMeshProUGUI>(LabelTitle);
+
+            if (deckBody == null)
+                deckBody = transform.Find("Body");
+
+            if (packTitle == null)
+            {
+                // Separate caption so the prefab's responsive layout and color animations
+                // cannot move or recolor the pack label when its deck visuals are hidden.
+                var host = new GameObject("PackCaption", typeof(RectTransform));
+                var rect = (RectTransform)host.transform;
+                rect.SetParent(transform, false);
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+                rect.pivot = new Vector2(0.5f, 1f);
+                rect.sizeDelta = new Vector2(PackTileWidth, 32f);
+                rect.anchoredPosition = new Vector2(0f, -450f);
+                packTitle = host.AddComponent<TextMeshProUGUI>();
+                if (title != null)
+                    packTitle.font = title.font;
+                packTitle.fontSize = 22f;
+                packTitle.alignment = TextAlignmentOptions.Center;
+                packTitle.color = new Color(0.89f, 0.88f, 0.80f);
+                packTitle.textWrappingMode = TextWrappingModes.NoWrap;
+                packTitle.overflowMode = TextOverflowModes.Ellipsis;
+                packTitle.raycastTarget = false;
+            }
 
             foreach (string label in HiddenLabels)
             {
@@ -313,13 +363,6 @@ namespace MDPro3.Plugins.Features.PackBrowser
             }
 
             return rect;
-        }
-
-        /// <summary>The square slot of a pack cover is square, not card shaped.</summary>
-        public void UseSquarePicture()
-        {
-            EnsurePictureSlots();
-            artRect.sizeDelta = new Vector2(PictureHeight, PictureHeight);
         }
 
         private static string Trim(string text, int maxLength)

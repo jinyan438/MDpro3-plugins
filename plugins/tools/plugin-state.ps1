@@ -54,8 +54,9 @@ function Get-PluginFiles {
         return @()
     }
 
+    # Source-authored metadata (e.g. transparent wrapper texture import settings) is
+    # part of the plugin. Unity-generated metadata only in Target is still preserved.
     return @(Get-ChildItem -LiteralPath $Root -Recurse -File |
-        Where-Object { $_.Extension -ne '.meta' } |
         Sort-Object -Property FullName)
 }
 

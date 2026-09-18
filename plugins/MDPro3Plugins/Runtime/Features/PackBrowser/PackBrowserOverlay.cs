@@ -23,8 +23,8 @@ namespace MDPro3.Plugins.Features.PackBrowser
     ///
     /// It is built at runtime on top of the game UI canvas and reuses the game components where it
     /// matters: SuperScrollView for the recycling grid, the deck grid tile (UI/ItemDeck.prefab) for
-    /// the cells and ArtRawImageHandler for the card art. The plugin ships no new assets, so the
-    /// pack "cover" is the cover card's own artwork.
+    /// the cells and ArtRawImageHandler for the card art. A shared foil wrapper surrounds each
+    /// pack's original cover artwork.
     ///
     /// While it is open it registers itself as UIManager.InputBlocker, which stops the main menu
     /// from reacting to Esc / right click at the same time.
@@ -34,8 +34,6 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private const string TileAddress = "UI/ItemDeck.prefab";
 
         // the tile size lives in PackTileItem, the pitch adds the gap of the grid
-        private const float TilePitchX = PackTileItem.TileWidth + 26f;
-        private const float TilePitchY = PackTileItem.TileHeight + 28f;
         private const float GridTopPadding = 10f;
         private const float GridBottomPadding = 30f;
 
@@ -49,6 +47,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private ScrollRect scrollRect;
         private RectTransform viewportRect;
         private SuperScrollView scrollView;
+        private BrowserMode gridMode;
         private AsyncOperationHandle<GameObject> tileHandle;
         private bool templateReady;
         private bool pendingPrint;
@@ -85,7 +84,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
             if (tile == null)
                 return "first tile is gone";
 
-            return DescribeSlot(tile.transform, PackTileItem.ArtObjectName, "cover")
+            return DescribeSlot(tile.transform, PackWrapperVisual.ObjectName + "/Foil/" + PackTileItem.ArtObjectName, "cover")
                 + " | "
                 + DescribeSlot(tile.transform, PackTileItem.CardObjectName, "card");
         }
@@ -410,15 +409,20 @@ namespace MDPro3.Plugins.Features.PackBrowser
             if (!templateReady)
                 return;
 
-            if (scrollView == null)
+            if (scrollView == null || gridMode != mode)
             {
+                scrollView?.Clear();
                 // SuperScrollView adds one listener per instance, this browser builds exactly one
                 // for its own scrollbar, so clear it first to stay idempotent.
                 if (scrollRect.verticalScrollbar != null)
                     scrollRect.verticalScrollbar.onValueChanged.RemoveAllListeners();
 
-                scrollView = new SuperScrollView(0, TilePitchX, TilePitchY, GridTopPadding,
+                bool isPack = mode == BrowserMode.Packs;
+                float pitchX = (isPack ? PackTileItem.PackTileWidth : PackTileItem.TileWidth) + 26f;
+                float pitchY = (isPack ? PackTileItem.PackTileHeight : PackTileItem.TileHeight) + 28f;
+                scrollView = new SuperScrollView(0, pitchX, pitchY, isPack ? 18f : GridTopPadding,
                     GridBottomPadding, template, OnTileRefresh, scrollRect);
+                gridMode = mode;
             }
 
             scrollView.selected = -1;

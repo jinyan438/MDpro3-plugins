@@ -34,18 +34,22 @@ plugins/
 │  │  │     ├─ PackBrowserFeature.cs       功能本体 + 主界面「卡包」按钮注入
 │  │  │     ├─ PackBrowserOverlay.cs       全屏卡包界面（网格 + 卡表 + 输入）
 │  │  │     ├─ PackTileItem.cs             格子行为（基于游戏自带卡组格子）
+│  │  │     ├─ PackWrapperVisual.cs        长条金色包装 + 封面原画 + 选中光框
 │  │  │     ├─ PackCatalog.cs              从游戏数据组装卡包与封面
 │  │  │     ├─ PackCoverTable.g.cs         生成的封面表（904 个卡包）
 │  │  │     └─ PackBrowserLabels.cs        多语言标签
 │  │  └─ Diagnostics/
 │  │     └─ PluginSelfTest.cs    游戏内自检（--diagnose 使用，不属于功能）
-│  └─ Editor/
-│     └─ PluginSelfCheck.cs      编辑器自检（只读导出 UI 结构与插件设置报告）
+│  ├─ Editor/
+│  │  └─ PluginSelfCheck.cs      编辑器自检（只读导出 UI 结构与插件设置报告）
+│  └─ Resources/MDPro3Plugins/PackBrowser/  共用包装与光框纹理（含导入设置）
 ├─ tools/
 │  ├─ plugin-state.ps1           同步 / 签名 / 构建状态 / 文件占用检测 / 读取 config.json
 │  ├─ plugin-diagnose.ps1        在构建好的游戏里跑自检
 │  ├─ pack_covers_rekowiki.json  爬取到的卡包一览（封面卡数据源）
-│  └─ build_pack_cover_table.py  由上面两者生成 PackCoverTable.g.cs
+│  ├─ build_pack_cover_table.py  由上面两者生成 PackCoverTable.g.cs
+│  ├─ build_pack_wrapper.py      从参考图印刷细节生成包装与光框（需要 Pillow）
+│  └─ pack_wrapper_source/       从用户参考图提取的金箔和底部标识源图
 └─ .state/                       自动生成的状态与日志（可随时删除）
 ```
 
@@ -87,18 +91,21 @@ plugins\config.json     ──游戏启动时读取（随时改，不用重建�
 - 位置：主界面左侧菜单底部（「退出」上方）新增一个按钮 **`卡包`**。它由游戏自己的主菜单按钮克隆而来
   （同一套底板、悬停动画、选中光标和音效），只替换了点击行为。
 - 打开后是**铺满屏幕的卡包墙**：`Data\pack\pack.db` 里的**全部 904 个卡包**，最新的在最前。
-  网格沿用游戏自带的 `SuperScrollView`（回收复用，同屏只实例化约 36 个格子，所以 904 个包也不卡）。
-- **格子的样子**：底板 / 悬停动画 / 选中光标沿用游戏自己的卡组格子 `UI/ItemDeck.prefab`，格子尺寸改成 240×276。
-  游戏那个格子的卡位只在卡组选择器的「抽卡预览」状态才显示，直接用会导致看不到图，所以格子**自己新建图槽**，
-  并按用途分两种形式：
+  网格沿用游戏自带的 `SuperScrollView`，只实例化可视区域和少量缓冲行中的格子，滚动时回收复用。
+- **格子的样子**：卡包采用 Master Duel 风格的 200×420 长条包装。底部的金箔压纹、深蓝 V 形条纹、
+  游戏字标和晶体三角标识从用户参考图提取，保留原版印刷细节。顶部原卡图保持矩形直边和不透明背景，
+  不使用透明立绘、圆弧裁剪或顶部遮罩。悬停/选中时显示白金内圈和金色辉光，包名位于光框下方。
+  卡包格子为 224×482，进入卡包后切回 240×276 的完整卡片格子；输入和音效继续复用 `UI/ItemDeck.prefab`。
 
   | 用途 | 图槽 | 加载组件 | 效果 |
   | --- | --- | --- | --- |
-  | **卡包封面** | 正方形 228×228 | 游戏自带 `ArtRawImageHandler` | 封面卡的**原画**（`Picture/Art` 是 624×624 方形裁切） |
+  | **卡包封面** | 包装内约 198×405 | 游戏自带 `ArtRawImageHandler` | 原封面卡的**原画和背景**，按比例居中裁切到长条区域，不拉伸 |
   | **卡包内的卡片** | 卡片比例 156.4×228 | 游戏自带 `CardRawImageHandler` | **完整卡图**（723×1054 整张卡，和编辑卡组界面的卡表同一个组件） |
 
-  MDPro3 本身没有任何卡包封面美术资源（只有一张筛选用的小图标），所以按你说的做法：
-  用爬取到的封面卡当卡包封面。
+  封面卡的选取保持原规则，只在原画上叠加插件自带的透明包装。包装与光框纹理由所有格子共用，
+  通过 Resources 随游戏打包，运行时无需额外联网。同步脚本会复制源码中自带的 `.meta` 导入设置，
+  同时保留 Unity 为其它文件自动生成的 `.meta`。
+  用 `python plugins/tools/build_pack_wrapper.py` 可从插件内保留的印刷源图重建资源，无需原始截图。
 - 封面的选取优先级（构建时已写死在 `PackCoverTable.g.cs`，运行时无需联网 / 无需读 json）：
 
   | 来源 | 数量 | 说明 |
