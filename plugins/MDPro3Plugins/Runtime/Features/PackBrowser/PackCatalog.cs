@@ -15,6 +15,8 @@ namespace MDPro3.Plugins.Features.PackBrowser
         /// <summary>Pack name without the date prefix.</summary>
         public string Name = string.Empty;
 
+        public PackCategory Category;
+
         public int Year;
         public int Month;
         public int Day;
@@ -92,6 +94,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
                 // fullName is "yyyy-MM-dd <pack name>"
                 entry.Name = pack.fullName.Length > 11 ? pack.fullName.Substring(11) : pack.fullName;
+                entry.Category = PackCategories.Classify(entry.Code, entry.Name);
 
                 if (cardsByPack.TryGetValue(pack.fullName, out var cards))
                     entry.Cards.AddRange(cards);

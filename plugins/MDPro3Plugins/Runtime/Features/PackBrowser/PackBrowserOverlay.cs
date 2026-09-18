@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
+using Toggle = UnityEngine.UI.Toggle;
 
 namespace MDPro3.Plugins.Features.PackBrowser
 {
@@ -39,8 +40,10 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private readonly List<PackEntry> packs = new List<PackEntry>();
         private readonly List<int> cards = new List<int>();
+        private readonly Toggle[] categoryToggles = new Toggle[PackCategories.Count];
 
         private BrowserMode mode = BrowserMode.Packs;
+        private PackCategory category = PackCategory.All;
         private PackEntry current;
         private int focused;
 
@@ -57,6 +60,11 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private TextMeshProUGUI titleText;
         private TextMeshProUGUI infoText;
         private TextMeshProUGUI hintText;
+        private TextMeshProUGUI emptyText;
+        private RectTransform categoryBar;
+        private RectTransform gridArea;
+
+        internal PackCategory SelectedCategory => category;
 
         public int PackCount => packs.Count;
 
@@ -127,8 +135,6 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private void Awake()
         {
             BuildLayout();
-
-            packs.AddRange(PackCatalog.All);
 
             UIManager.InputBlocker = this;
 
@@ -215,20 +221,26 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             // header
             titleText = NewText("Title", root, font, 46f, TextAlignmentOptions.TopLeft,
-                new Color(1f, 1f, 1f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(60f, -92f), new Vector2(1200f, -34f));
+                new Color(1f, 1f, 1f, 1f), new Vector2(0f, 1f), new Vector2(0.53f, 1f),
+                new Vector2(60f, -92f), new Vector2(-20f, -34f));
+            FitText(titleText, 24f, 46f);
 
             infoText = NewText("Info", root, font, 30f, TextAlignmentOptions.TopLeft,
-                new Color(0.86f, 0.9f, 1f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(60f, -146f), new Vector2(1500f, -98f));
+                new Color(0.86f, 0.9f, 1f, 1f), new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(60f, -146f), new Vector2(-60f, -98f));
+            FitText(infoText, 18f, 30f);
 
             hintText = NewText("Hint", root, font, 26f, TextAlignmentOptions.TopRight,
-                new Color(0.72f, 0.76f, 0.86f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-900f, -92f), new Vector2(-60f, -44f));
+                new Color(0.72f, 0.76f, 0.86f, 1f), new Vector2(0.53f, 1f), new Vector2(1f, 1f),
+                new Vector2(20f, -92f), new Vector2(-60f, -44f));
+            FitText(hintText, 16f, 26f);
+
+            BuildCategoryBar(root, font);
 
             // grid
             var area = NewRect("Grid", root, Vector2.zero, Vector2.one,
                 new Vector2(60f, 44f), new Vector2(-60f, -170f));
+            gridArea = area;
 
             var scrollObject = new GameObject("ScrollRect", typeof(RectTransform));
             var scrollRectTransform = (RectTransform)scrollObject.transform;
@@ -264,6 +276,68 @@ namespace MDPro3.Plugins.Features.PackBrowser
             var bar = NewScrollbar(scrollRectTransform);
             scrollRect.verticalScrollbar = bar;
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+
+            emptyText = NewText("EmptyCategory", area, font, 30f, TextAlignmentOptions.Center,
+                Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            emptyText.text = PackBrowserLabels.EmptyCategory;
+            emptyText.gameObject.SetActive(false);
+        }
+
+        private void BuildCategoryBar(RectTransform root, TMP_FontAsset font)
+        {
+            categoryBar = NewRect("Categories", root, new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(60f, -282f), new Vector2(-60f, -166f));
+            var group = categoryBar.gameObject.AddComponent<ToggleGroup>();
+            var counts = new int[PackCategories.Count];
+            foreach (var entry in PackCatalog.All)
+                counts[(int)entry.Category]++;
+            counts[0] = PackCatalog.All.Count;
+
+            for (int i = 0; i < PackCategories.Count; i++)
+            {
+                var selectedCategory = (PackCategory)i;
+                int column = i % 5;
+                int row = i / 5;
+                var rect = NewRect(selectedCategory.ToString(), categoryBar,
+                    new Vector2(column / 5f, 1f), new Vector2((column + 1) / 5f, 1f),
+                    new Vector2(3f, -54f - row * 62f), new Vector2(-3f, -row * 62f));
+                var background = rect.gameObject.AddComponent<Image>();
+                background.color = new Color(0.2f, 0.2f, 0.2f, 0.65f);
+                var selected = NewImage("Selected", rect, new Color(1f, 0.82f, 0.36f, 1f));
+                selected.rectTransform.anchorMin = Vector2.zero;
+                selected.rectTransform.anchorMax = new Vector2(1f, 0f);
+                selected.rectTransform.offsetMin = Vector2.zero;
+                selected.rectTransform.offsetMax = new Vector2(0f, 3f);
+                selected.raycastTarget = false;
+
+                var label = NewText("Label", rect, font, 26f, TextAlignmentOptions.Center,
+                    Color.white, Vector2.zero, Vector2.one, new Vector2(10f, 5f), new Vector2(-10f, -5f));
+                label.text = PackBrowserLabels.Category(selectedCategory) + " (" + counts[i] + ")";
+                FitText(label, 16f, 26f);
+
+                var toggle = rect.gameObject.AddComponent<Toggle>();
+                toggle.targetGraphic = background;
+                toggle.graphic = selected;
+                toggle.isOn = i == 0;
+                toggle.group = group;
+                toggle.onValueChanged.AddListener(value =>
+                {
+                    if (!value || category == selectedCategory)
+                        return;
+                    AudioManager.PlaySE("SE_MENU_DECIDE");
+                    SelectCategory(selectedCategory);
+                });
+                categoryToggles[i] = toggle;
+            }
+        }
+
+        private static void FitText(TextMeshProUGUI text, float minimum, float maximum)
+        {
+            text.enableAutoSizing = true;
+            text.fontSizeMin = minimum;
+            text.fontSizeMax = maximum;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Ellipsis;
         }
 
         private Scrollbar NewScrollbar(RectTransform parent)
@@ -375,7 +449,23 @@ namespace MDPro3.Plugins.Features.PackBrowser
             mode = BrowserMode.Packs;
             current = null;
             focused = -1;
+            packs.Clear();
+            foreach (var entry in PackCatalog.All)
+                if (category == PackCategory.All || entry.Category == category)
+                    packs.Add(entry);
             Print();
+        }
+
+        internal void SelectCategory(PackCategory value)
+        {
+            if ((int)value < 0 || (int)value >= PackCategories.Count)
+                return;
+
+            category = value;
+            for (int i = 0; i < categoryToggles.Length; i++)
+                categoryToggles[i].SetIsOnWithoutNotify(i == (int)value);
+            scrollRect.StopMovement();
+            ShowPacks();
         }
 
         /// <summary>Shows the cards of one pack.</summary>
@@ -394,6 +484,10 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private void Print()
         {
+            bool showingPacks = mode == BrowserMode.Packs;
+            categoryBar.gameObject.SetActive(showingPacks);
+            gridArea.offsetMax = new Vector2(-60f, showingPacks ? -300f : -170f);
+            emptyText.gameObject.SetActive(showingPacks && packs.Count == 0);
             UpdateHeader();
 
             // the grid needs the tile template and a laid out viewport, both arrive a frame later
@@ -464,6 +558,13 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private static string Caption(PackEntry entry)
         {
+            if (entry.Category == PackCategory.Basic)
+            {
+                string sequence = PackCategories.BasicSequence(entry.Code);
+                if (!string.IsNullOrEmpty(sequence))
+                    return sequence;
+            }
+
             if (!string.IsNullOrEmpty(entry.Code))
                 return entry.Code;
 
@@ -485,7 +586,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             if (mode == BrowserMode.Packs)
             {
-                infoText.text = packs.Count + " " + PackBrowserLabels.Title;
+                infoText.text = PackBrowserLabels.Category(category) + " (" + packs.Count + ")";
                 return;
             }
 

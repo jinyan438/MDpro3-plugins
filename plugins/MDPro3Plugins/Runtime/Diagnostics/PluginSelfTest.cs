@@ -952,6 +952,8 @@ namespace MDPro3.Plugins.Diagnostics
             if (overlay.LiveTileCount <= 0 || overlay.LiveTileCount > overlay.TileCount)
                 Fail("the pack wall has " + overlay.LiveTileCount + " live tiles for " + overlay.TileCount + " entries");
 
+            CheckPackCategories(overlay, catalog);
+
             PackEntry first = null;
             foreach (var entry in catalog)
             {
@@ -992,6 +994,46 @@ namespace MDPro3.Plugins.Diagnostics
 
             packFeature.CloseBrowser();
             notes.Add("pack browser closed again, open browsers: " + (packFeature.Overlay != null));
+        }
+
+        private static void CheckPackCategories(PackBrowserOverlay overlay, List<PackEntry> catalog)
+        {
+            int total = 0;
+            for (int i = 1; i < PackCategories.Count; i++)
+            {
+                var category = (PackCategory)i;
+                int expected = 0;
+                PackEntry sample = null;
+                foreach (var entry in catalog)
+                {
+                    if (entry.Category != category)
+                        continue;
+                    expected++;
+                    if (sample == null && entry.Count > 0)
+                        sample = entry;
+                }
+
+                total += expected;
+                overlay.SelectCategory(category);
+                if (overlay.PackCount != expected || overlay.TileCount != expected)
+                    Fail("pack category " + category + " has an incorrect filtered count");
+                if (sample != null)
+                {
+                    overlay.ShowCards(sample);
+                    if (overlay.CardCount != sample.Count || overlay.TileCount != sample.Count)
+                        Fail("pack category " + category + " did not open its card list");
+                    overlay.Back();
+                    if (overlay.SelectedCategory != category || overlay.TileCount != expected)
+                        Fail("returning from cards lost the pack category " + category);
+                }
+                notes.Add("pack category " + category + ": " + expected);
+            }
+
+            if (total != catalog.Count)
+                Fail("pack categories do not cover the full catalog exactly once");
+            overlay.SelectCategory(PackCategory.All);
+            if (overlay.PackCount != catalog.Count || overlay.TileCount != catalog.Count)
+                Fail("selecting all packs did not restore the catalog");
         }
 
         private static void CheckMainMenuEntry()

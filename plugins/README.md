@@ -36,6 +36,7 @@ plugins/
 │  │  │     ├─ PackTileItem.cs             格子行为（基于游戏自带卡组格子）
 │  │  │     ├─ PackWrapperVisual.cs        长条金色包装 + 封面原画 + 选中光框
 │  │  │     ├─ PackCatalog.cs              从游戏数据组装卡包与封面
+│  │  │     ├─ PackCategory.cs             卡包商品分类规则
 │  │  │     ├─ PackCoverTable.g.cs         生成的封面表（904 个卡包）
 │  │  │     └─ PackBrowserLabels.cs        多语言标签
 │  │  └─ Diagnostics/
@@ -92,6 +93,31 @@ plugins\config.json     ──游戏启动时读取（随时改，不用重建�
   （同一套底板、悬停动画、选中光标和音效），只替换了点击行为。
 - 打开后是**铺满屏幕的卡包墙**：`Data\pack\pack.db` 里的**全部 904 个卡包**，最新的在最前。
   网格沿用游戏自带的 `SuperScrollView`，只实例化可视区域和少量缓冲行中的格子，滚动时回收复用。
+- 顶部按顺序提供 **全部卡包、基本卡包、预组卡包、主题构筑卡包、主题强化卡包、动画卡包、漫画卡包、海外卡包、特别卡包、活动卡包**，
+  每项显示卡包数量；切换后从列表顶部显示，仍按发售日期由新到旧排列。进入卡包后返回，会保留原分类。
+  简体、繁体和游戏支持的其他语言均有对应标签，无卡包的分类显示空状态。
+
+  分类参考 [Reko Wiki 系列卡包一览](https://rekowiki.org/wiki/遊☆戯☆王/系列卡包一覽)（2026-09-18 阅读），
+  按商品系列而非卡片效果或封面角色划分。该页面只收录主要系列；下表对本地数据库中的早期商品、书籍、赠卡等作了补充约定。
+
+  | 分类 | 商品系列 / 归属规则 |
+  | --- | --- |
+  | 基本卡包 | Vol.1～7、Booster 1～7、第二／三期通常补充包、SOD 起的通常补充包（包含页面已列出的 IMPH） |
+  | 预组卡包 | SD、SR、STARTER、EX、角色预组、Duelist Set／Entry Deck、TACTICAL-TRY DECK、THE CHRONICLES DECK |
+  | 主题构筑卡包 | Booster SP、Deck Build Pack、DUEL TERMINAL |
+  | 主题强化卡包 | Duelist Pack、TERMINAL WORLD、TACTICAL-TRY PACK、REVOLUTION BOOSTER、LINK VRAINS PACK／DUELIST SET、SELECTION |
+  | 动画卡包 | Collection／Collectors Pack、Animation Chronicle、MOVIE PACK、LIMITED PACK GX |
+  | 漫画卡包 | PREMIUM PACK、漫画单行本附卡、Jump 杂志附卡／订阅特典、LIMITED EDITION、V JUMP EDITION、VP 应募包 |
+  | 海外卡包 | EXTRA PACK、WORLD PREMIERE PACK 等海外先行卡引进系列；全球发售的通常补充包仍属于基本卡包 |
+  | 特别卡包 | 周年纪念、收藏／复刻、礼盒、官方图鉴／攻略书、游戏／周边同捆商品，以及尚未识别的新商品 |
+  | 活动卡包 | 大会奖品、TP／AT、Jump Festa／嘉年华、促销／联动／配布、电影入场／预售赠卡 |
+
+  每个卡包只归入一个具体分类，「全部卡包」汇总所有分类。识别优先采用完整系列编号，
+  并用商品名称处理早期无编号卡包；`DBLE` 等非构筑商品不会因为 `DB` 前缀被误分。
+  分类在插件内完成，不修改 `pack.db`，运行时无需联网。新增常规系列编号时可更新 `PackCategory.cs`；
+  无法识别的商品保留在「特别卡包」，不会从列表中消失。
+- 基本卡包格子使用 Wiki 的数字序列显示（例如 SOD 显示为 `401`、DANE 显示为 `1008`）；
+  第一期没有这类官方数字序列的 `Vol.1`、`Booster 1` 等保留原名。其他分类仍显示商品编号。
 - **格子的样子**：卡包采用 Master Duel 风格的 200×420 长条包装。底部的金箔压纹、深蓝 V 形条纹、
   游戏字标和晶体三角标识从用户参考图提取，保留原版印刷细节。包装按卡包顺序循环使用
   **金、绿、红、橙、蓝、紫、黑、银**八种金属色，选中光框始终保持金色。顶部原卡图保持矩形直边和不透明背景，
