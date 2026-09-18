@@ -35,6 +35,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private const float PictureHeight = 228f;
         private const float PictureTopInset = 6f;
+        private const float CardTitleBottomInset = 8f;
 
         private const string LabelTitle = "TextDeckName";
 
@@ -305,6 +306,11 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             if (title == null)
                 title = Manager.GetElement<TextMeshProUGUI>(LabelTitle);
+            if (title != null)
+            {
+                var titleRect = title.rectTransform;
+                titleRect.anchoredPosition = new Vector2(titleRect.anchoredPosition.x, CardTitleBottomInset);
+            }
 
             if (deckBody == null)
                 deckBody = transform.Find("Body");
