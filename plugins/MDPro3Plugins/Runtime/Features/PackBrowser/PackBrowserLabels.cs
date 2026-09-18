@@ -14,21 +14,6 @@ namespace MDPro3.Plugins.Features.PackBrowser
         public static string MenuEntry => Pick("Card packs", "Sobres", "Pacotes", "Boites", "Kartenpacks",
             "Buste", "\u30ab\u30fc\u30c9\u30d1\u30c3\u30af", "\uce74\ub4dc \ud32c", "\u5361\u5305");
 
-        public static string Hint => Pick("Click a pack to see its cards / Esc to close",
-            "Clic en un sobre para ver sus cartas / Esc para cerrar",
-            "Clique num pacote para ver as cartas / Esc para fechar",
-            "Cliquez sur un pack pour voir ses cartes / Echap pour fermer",
-            "Pack anklicken um die Karten zu sehen / Esc zum Schliessen",
-            "Clicca un pacchetto per vedere le carte / Esc per chiudere",
-            "\u30d1\u30c3\u30af\u3092\u9078\u3093\u3067\u53ce\u9332\u30ab\u30fc\u30c9\u3092\u8868\u793a / Esc\u3067\u9589\u3058\u308b",
-            "\ud32c\uc744 \uc120\ud0dd\ud558\uc5ec \uce74\ub4dc \ubcf4\uae30 / Esc\ub85c \ub2eb\uae30",
-            "\u9ede\u64ca\u5361\u5305\u67e5\u770b\u5167\u542b\u5361\u724c / Esc \u95dc\u9589");
-
-        public static string Back => Pick("Esc: back to the pack list", "Esc: volver a la lista",
-            "Esc: voltar a lista", "Echap : retour a la liste", "Esc: zurueck zur Liste",
-            "Esc: torna all'elenco", "Esc\uff1a\u30d1\u30c3\u30af\u4e00\u89a7\u306b\u623b\u308b",
-            "Esc: \ud32c \ubaa9\ub85d\uc73c\ub85c", "Esc\uff1a\u8fd4\u56de\u5361\u5305\u5217\u8868");
-
         public static string Cards => Pick("cards", "cartas", "cartas", "cartes", "Karten",
             "carte", "\u679a", "\uc7a5", "\u5f35");
 

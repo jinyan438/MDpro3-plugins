@@ -946,6 +946,9 @@ namespace MDPro3.Plugins.Diagnostics
             if (!overlay.IsReady)
                 Fail("the pack browser grid was not built");
 
+            if (!overlay.BackButtonReady)
+                Fail("the pack browser's game-style back button is not ready");
+
             if (overlay.TileCount != catalog.Count)
                 Fail("the pack wall lists " + overlay.TileCount + " entries instead of " + catalog.Count);
 

@@ -1,12 +1,14 @@
 using MDPro3.Duel.YGOSharp;
 using MDPro3.Servant;
 using MDPro3.UI;
+using MDPro3.UI.PropertyOverride;
 using MDPro3.Utility;
 using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.Events;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 using Toggle = UnityEngine.UI.Toggle;
@@ -59,10 +61,10 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private TextMeshProUGUI titleText;
         private TextMeshProUGUI infoText;
-        private TextMeshProUGUI hintText;
         private TextMeshProUGUI emptyText;
         private RectTransform categoryBar;
         private RectTransform gridArea;
+        private Button backButton;
 
         internal PackCategory SelectedCategory => category;
 
@@ -81,6 +83,10 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         /// <summary>Size of the scrolling viewport, used to check the runtime layout.</summary>
         public Vector2 ViewportSize => viewportRect != null ? viewportRect.rect.size : Vector2.zero;
+
+        /// <summary>Whether the cloned game back button is ready to receive pointer input.</summary>
+        public bool BackButtonReady => backButton != null && backButton.interactable
+            && backButton.gameObject.activeInHierarchy;
 
         /// <summary>Diagnostic: state of the picture slots of the first live tile.</summary>
         public string DescribeFirstTile()
@@ -214,7 +220,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
             root.offsetMin = Vector2.zero;
             root.offsetMax = Vector2.zero;
 
-            var backdrop = NewImage("Backdrop", root, new Color(0f, 0f, 0f, 0.88f));
+            var backdrop = NewImage("Backdrop", root, Color.black);
             Stretch(backdrop.rectTransform, 0f, 0f, 0f, 0f);
 
             var font = PickFont();
@@ -230,10 +236,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 new Vector2(60f, -146f), new Vector2(-60f, -98f));
             FitText(infoText, 18f, 30f);
 
-            hintText = NewText("Hint", root, font, 26f, TextAlignmentOptions.TopRight,
-                new Color(0.72f, 0.76f, 0.86f, 1f), new Vector2(0.53f, 1f), new Vector2(1f, 1f),
-                new Vector2(20f, -92f), new Vector2(-60f, -44f));
-            FitText(hintText, 16f, 26f);
+            BuildBackButton(root);
 
             BuildCategoryBar(root, font);
 
@@ -281,6 +284,74 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             emptyText.text = PackBrowserLabels.EmptyCategory;
             emptyText.gameObject.SetActive(false);
+        }
+
+        private void BuildBackButton(RectTransform root)
+        {
+            var ui = PluginGame.UI;
+            var source = ui != null ? ui.btnExit : null;
+            if (source == null)
+            {
+                PluginLog.Error("pack browser: the game's common back button is not available");
+                return;
+            }
+
+            var sourceRect = source.GetComponent<RectTransform>();
+            if (sourceRect == null)
+            {
+                PluginLog.Error("pack browser: the game's common back button has no RectTransform");
+                return;
+            }
+
+            var clone = Instantiate(source.gameObject, root, false);
+            clone.name = "ButtonBack";
+            clone.SetActive(true);
+
+            var rect = clone.GetComponent<RectTransform>();
+            if (rect == null)
+            {
+                PluginLog.Error("pack browser: the cloned game back button has no RectTransform");
+                Destroy(clone);
+                return;
+            }
+
+            // This component contains the source button's layout coordinates. The clone keeps the
+            // already resolved game size, but owns the matching top-left position in this overlay.
+            var layoutOverride = clone.GetComponent<PropertyOverrider_RectTransform>();
+            if (layoutOverride != null)
+                Destroy(layoutOverride);
+
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = sourceRect.rect.size;
+            rect.anchoredPosition = new Vector2(
+                Mathf.Abs(sourceRect.anchoredPosition.x),
+                -Mathf.Abs(sourceRect.anchoredPosition.y));
+
+            backButton = clone.GetComponent<Button>();
+            if (backButton == null)
+            {
+                PluginLog.Error("pack browser: the cloned game back button has no Button component");
+                Destroy(clone);
+                return;
+            }
+
+            // The source closes the current servant. Disable that persistent action and bind the
+            // browser's two-level back behavior instead.
+            for (int i = 0; i < backButton.onClick.GetPersistentEventCount(); i++)
+                backButton.onClick.SetPersistentListenerState(i, UnityEventCallState.Off);
+            backButton.onClick.RemoveAllListeners();
+            backButton.onClick.AddListener(OnBackButtonClicked);
+        }
+
+        private void OnBackButtonClicked()
+        {
+            if (closing)
+                return;
+
+            AudioManager.PlaySE("SE_MENU_CANCEL");
+            Back();
         }
 
         private void BuildCategoryBar(RectTransform root, TMP_FontAsset font)
@@ -577,9 +648,6 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 titleText.text = mode == BrowserMode.Packs
                     ? PackBrowserLabels.Title
                     : (current != null ? current.Name : PackBrowserLabels.Title);
-
-            if (hintText != null)
-                hintText.text = mode == BrowserMode.Packs ? PackBrowserLabels.Hint : PackBrowserLabels.Back;
 
             if (infoText == null)
                 return;
