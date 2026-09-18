@@ -5,6 +5,11 @@
       "id": "releaseDateSort",
       "enabled": true,
       "note": "编辑卡组界面：排序里增加按卡片发布时间排序（升序 / 降序）"
+    },
+    {
+      "id": "packBrowser",
+      "enabled": true,
+      "note": "主界面：卡包浏览（铺开所有卡包，封面用封面卡，点开查看收录卡片）"
     }
   ],
   "logFeatureTicks": false,

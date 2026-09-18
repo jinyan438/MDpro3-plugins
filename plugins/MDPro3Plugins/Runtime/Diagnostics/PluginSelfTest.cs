@@ -1,13 +1,18 @@
 using MDPro3.Duel.YGOSharp;
+using MDPro3.Plugins.Features.PackBrowser;
 using MDPro3.Plugins.Features.ReleaseDateSort;
 using MDPro3.Servant;
 using MDPro3.UI;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
+using TMPro;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.Events;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using UnityEngine.UI;
 
 namespace MDPro3.Plugins.Diagnostics
 {
@@ -39,8 +44,12 @@ namespace MDPro3.Plugins.Diagnostics
         private const int StepCheckSortOrder = 7;
         private const int StepCheckOrderAfterPrint = 8;
         private const int StepCheckRowInDeckEditor = 9;
-        private const int StepReport = 10;
-        private const int StepQuit = 11;
+        private const int StepCheckPackData = 10;
+        private const int StepOpenPackBrowser = 11;
+        private const int StepWaitForPackBrowser = 12;
+        private const int StepCheckPackBrowser = 13;
+        private const int StepReport = 14;
+        private const int StepQuit = 15;
 
         private static bool started;
         private static bool requested;
@@ -162,6 +171,27 @@ namespace MDPro3.Plugins.Diagnostics
                 case StepCheckRowInDeckEditor:
                     if (!TickSortRowInDeckEditor())
                         return;
+                    GoTo(StepCheckPackData);
+                    return;
+
+                case StepCheckPackData:
+                    CheckPackData();
+                    GoTo(StepOpenPackBrowser);
+                    return;
+
+                case StepOpenPackBrowser:
+                    StartPackBrowserCheck();
+                    GoTo(StepWaitForPackBrowser);
+                    return;
+
+                case StepWaitForPackBrowser:
+                    if (!TickPackBrowserOpen())
+                        return;
+                    GoTo(StepCheckPackBrowser);
+                    return;
+
+                case StepCheckPackBrowser:
+                    CheckPackBrowserContent();
                     GoTo(StepReport);
                     return;
 
@@ -689,6 +719,317 @@ namespace MDPro3.Plugins.Diagnostics
             }
 
             return null;
+        }
+
+        #endregion
+
+        #region Pack browser checks
+
+        private static PackBrowserFeature packFeature;
+        private static bool packChecksSkipped;
+        private static bool wallCaptured;
+        private static PackEntry shotPack;
+
+        private static void CheckPackData()
+        {
+            packFeature = PluginRegistry.Get<PackBrowserFeature>(PackBrowserFeature.FeatureId);
+            if (packFeature == null || !PluginRegistry.IsRunning(PackBrowserFeature.FeatureId))
+            {
+                notes.Add("the pack browser feature is not running (see config.json), its checks are skipped");
+                packChecksSkipped = true;
+                return;
+            }
+
+            notes.Add("generated pack cover table entries: " + PackCoverTable.Count);
+
+            var catalog = PackCatalog.All;
+            notes.Add("packs from the game data: " + catalog.Count
+                + " (PacksManager: " + PacksManager.packs.Count + ")");
+
+            if (PackCoverTable.Count == 0)
+                Fail("the generated pack cover table is empty");
+
+            if (catalog.Count != PacksManager.packs.Count)
+                Fail("the pack catalog does not match PacksManager");
+
+            var kinds = new int[7];
+            int withoutCover = 0;
+            int coverOutsidePack = 0;
+            int withCards = 0;
+            PackEntry sample = null;
+
+            foreach (var entry in catalog)
+            {
+                if (entry.Count > 0)
+                    withCards++;
+
+                if (entry.CoverCard == 0)
+                {
+                    withoutCover++;
+                    continue;
+                }
+
+                if (entry.Count > 0 && !entry.Cards.Contains(entry.CoverCard))
+                    coverOutsidePack++;
+
+                if (entry.CoverKind > 0 && entry.CoverKind < kinds.Length)
+                    kinds[entry.CoverKind]++;
+
+                if (sample == null && entry.Count > 5)
+                    sample = entry;
+            }
+
+            notes.Add("packs with card data: " + withCards + ", without: " + (catalog.Count - withCards));
+            notes.Add("packs without a cover card: " + withoutCover);
+
+            for (int kind = 1; kind < kinds.Length; kind++)
+                if (kinds[kind] > 0)
+                    notes.Add("cover from " + PackCoverTable.DescribeKind(kind) + ": " + kinds[kind]);
+
+            if (withoutCover > 0)
+                Fail(withoutCover + " packs have no cover card");
+
+            if (coverOutsidePack > 0)
+                Fail(coverOutsidePack + " cover cards are not part of their own pack");
+
+            if (sample != null)
+                notes.Add("sample pack: " + sample.Code + " " + sample.Name + " -> " + sample.Count
+                    + " cards, cover " + sample.CoverCard + " (" + sample.CoverSourceText + ")");
+        }
+
+        private static void StartPackBrowserCheck()
+        {
+            if (packChecksSkipped || packFeature == null)
+                return;
+
+            // the browser lives on the main menu, so go back there first
+            var menu = Program.instance.menu;
+            if (menu == null)
+            {
+                notes.Add("the main menu servant is not available, pack browser check skipped");
+                packChecksSkipped = true;
+                return;
+            }
+
+            Program.instance.ShiftToServant(menu);
+        }
+
+        private static bool TickPackBrowserOpen()
+        {
+            if (packChecksSkipped || packFeature == null)
+                return true;
+
+            if (!(PluginGame.CurrentServant is MainMenu))
+            {
+                if (timer > UiTimeout)
+                {
+                    notes.Add("the main menu did not come back within " + UiTimeout + "s, pack browser check skipped");
+                    packChecksSkipped = true;
+                }
+
+                return false;
+            }
+
+            if (packFeature.Overlay == null)
+            {
+                packFeature.ShowBrowser();
+                if (packFeature.Overlay == null)
+                {
+                    notes.Add("the pack browser could not be opened, UI check skipped");
+                    packChecksSkipped = true;
+                    return true;
+                }
+            }
+
+            if (packFeature.Overlay.IsReady)
+            {
+                // give the picture loaders a few frames so the checks below see real textures
+                stepFrames++;
+
+                if (stepFrames < 40)
+                    return false;
+
+                if (stepFrames == 40 && !wallCaptured)
+                {
+                    wallCaptured = true;
+                    string path = ScreenshotPath("pack-wall.png");
+                    ScreenCapture.CaptureScreenshot(path);
+                    notes.Add("pack wall screenshot: " + path);
+                }
+
+                // open a pack so the card picture slot is exercised and can be captured too
+                if (stepFrames == 45)
+                {
+                    shotPack = FindPackWithCards();
+                    if (shotPack != null)
+                        packFeature.Overlay.ShowCards(shotPack);
+                }
+
+                if (stepFrames == 90)
+                {
+                    notes.Add("pack card slot: " + packFeature.Overlay.DescribeFirstTile());
+                    string path = ScreenshotPath("pack-cards.png");
+                    ScreenCapture.CaptureScreenshot(path);
+                    notes.Add("pack cards screenshot: " + path);
+                }
+
+                if (stepFrames == 95)
+                {
+                    if (shotPack != null)
+                        packFeature.Overlay.Back();
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (timer > UiTimeout)
+            {
+                notes.Add("the pack browser grid did not become ready within " + UiTimeout + "s, UI check skipped");
+                packChecksSkipped = true;
+            }
+
+            return false;
+        }
+
+        private static PackEntry FindPackWithCards()
+        {
+            foreach (var entry in PackCatalog.All)
+                if (entry.Count > 3)
+                    return entry;
+
+            return null;
+        }
+
+        /// <summary>Writes the screenshot into the plugin state folder next to this repository.</summary>
+        private static string ScreenshotPath(string fileName)
+        {
+            try
+            {
+                var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+                for (int level = 0; level < 6 && directory != null; level++)
+                {
+                    string candidate = Path.Combine(directory.FullName, "plugins", ".state");
+                    if (Directory.Exists(candidate))
+                        return Path.Combine(candidate, fileName);
+
+                    directory = directory.Parent;
+                }
+            }
+            catch (Exception)
+            {
+                // fall back to the working directory below
+            }
+
+            return Path.Combine(Directory.GetCurrentDirectory(), fileName);
+        }
+
+        private static void CheckPackBrowserContent()
+        {
+            if (packChecksSkipped || packFeature == null)
+                return;
+
+            var overlay = packFeature.Overlay;
+            if (overlay == null)
+            {
+                Fail("the pack browser closed unexpectedly");
+                return;
+            }
+
+            var catalog = PackCatalog.All;
+            notes.Add("pack browser ready, list entries: " + overlay.TileCount
+                + ", live tiles: " + overlay.LiveTileCount + ", packs: " + overlay.PackCount
+                + ", viewport: " + overlay.ViewportSize);
+            notes.Add("cover art slot: " + overlay.DescribeFirstTile());
+
+            if (!overlay.IsReady)
+                Fail("the pack browser grid was not built");
+
+            if (overlay.TileCount != catalog.Count)
+                Fail("the pack wall lists " + overlay.TileCount + " entries instead of " + catalog.Count);
+
+            if (overlay.LiveTileCount <= 0 || overlay.LiveTileCount > overlay.TileCount)
+                Fail("the pack wall has " + overlay.LiveTileCount + " live tiles for " + overlay.TileCount + " entries");
+
+            PackEntry first = null;
+            foreach (var entry in catalog)
+            {
+                if (entry.Count > 3)
+                {
+                    first = entry;
+                    break;
+                }
+            }
+
+            if (first == null)
+            {
+                notes.Add("no pack with cards found, opening a pack is not checked");
+            }
+            else
+            {
+                overlay.ShowCards(first);
+                notes.Add("opened the pack " + first.Code + " with " + overlay.TileCount
+                    + " listed cards (pack has " + first.Count + ")");
+
+                if (overlay.CardCount != first.Count)
+                    Fail("the opened pack reports " + overlay.CardCount + " cards instead of " + first.Count);
+
+                if (overlay.TileCount != first.Count)
+                    Fail("the opened pack lists " + overlay.TileCount + " cards instead of " + first.Count);
+
+                overlay.Back();
+                if (overlay.CardCount != catalog.Count)
+                    Fail("Esc did not return to the pack wall");
+                else
+                    notes.Add("Esc returned to the pack wall");
+            }
+
+            // the browser must also open from the main menu entry the way a player uses it, and the
+            // cloned button must not run the game action of the entry it was copied from
+            packFeature.CloseBrowser();
+            CheckMainMenuEntry();
+
+            packFeature.CloseBrowser();
+            notes.Add("pack browser closed again, open browsers: " + (packFeature.Overlay != null));
+        }
+
+        private static void CheckMainMenuEntry()
+        {
+            var menu = PluginGame.CurrentServant as MainMenu;
+            var entry = MainMenuPackEntry.FindInjected(menu);
+            if (entry == null)
+            {
+                Fail("the main menu has no card pack entry");
+                return;
+            }
+
+            var label = entry.GetElement<TextMeshProUGUI>("Text");
+            notes.Add("main menu entry: " + entry.name + " -> " + (label != null ? label.text : "no label"));
+
+            var button = entry.GetSelectable() as Button;
+            if (button == null)
+            {
+                Fail("the card pack entry has no button");
+                return;
+            }
+
+            int leftover = 0;
+            for (int index = 0; index < button.onClick.GetPersistentEventCount(); index++)
+                if (button.onClick.GetPersistentListenerState(index) != UnityEventCallState.Off)
+                    leftover++;
+
+            if (leftover > 0)
+                Fail("the card pack entry still runs " + leftover + " game menu action(s)");
+
+            button.onClick.Invoke();
+
+            if (packFeature.Overlay == null)
+                Fail("clicking the card pack entry did not open the browser");
+            else if (!(PluginGame.CurrentServant is MainMenu))
+                Fail("clicking the card pack entry left the main menu");
+            else
+                notes.Add("clicking the card pack entry opened the browser, remaining menu actions: " + leftover);
         }
 
         #endregion

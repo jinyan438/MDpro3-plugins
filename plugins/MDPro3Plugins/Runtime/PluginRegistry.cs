@@ -30,6 +30,7 @@ namespace MDPro3.Plugins
         private static IEnumerable<IPluginFeature> CreateAll()
         {
             yield return new Features.ReleaseDateSort.ReleaseDateSortFeature();
+            yield return new Features.PackBrowser.PackBrowserFeature();
         }
 
         /// <summary>

@@ -24,12 +24,19 @@ plugins/
 │  │  ├─ PluginConfig.cs         读取 config.json
 │  │  ├─ PluginHost.cs           ★ 唯一常驻宿主：观察环境 → 分发事件 → tick 功能
 │  │  ├─ Features/               一个功能一个目录
-│  │  │  └─ ReleaseDateSort/     编辑卡组界面按卡片发布时间排序
-│  │  │     ├─ ReleaseDateSortFeature.cs   功能本体（订阅事件、维护排序）
-│  │  │     ├─ ReleaseDateSortToggle.cs    排序弹窗里的新条目行为
-│  │  │     ├─ SearchOrderRowInjector.cs   把新条目注入排序弹窗
-│  │  │     ├─ CardReleaseDate.cs          取卡包首发日期
-│  │  │     └─ ReleaseDateSortLabels.cs    多语言标签
+│  │  │  ├─ ReleaseDateSort/     编辑卡组界面按卡片发布时间排序
+│  │  │  │  ├─ ReleaseDateSortFeature.cs   功能本体（订阅事件、维护排序）
+│  │  │  │  ├─ ReleaseDateSortToggle.cs    排序弹窗里的新条目行为
+│  │  │  │  ├─ SearchOrderRowInjector.cs   把新条目注入排序弹窗
+│  │  │  │  ├─ CardReleaseDate.cs          取卡包首发日期
+│  │  │  │  └─ ReleaseDateSortLabels.cs    多语言标签
+│  │  │  └─ PackBrowser/         主界面卡包浏览
+│  │  │     ├─ PackBrowserFeature.cs       功能本体 + 主界面「卡包」按钮注入
+│  │  │     ├─ PackBrowserOverlay.cs       全屏卡包界面（网格 + 卡表 + 输入）
+│  │  │     ├─ PackTileItem.cs             格子行为（基于游戏自带卡组格子）
+│  │  │     ├─ PackCatalog.cs              从游戏数据组装卡包与封面
+│  │  │     ├─ PackCoverTable.g.cs         生成的封面表（904 个卡包）
+│  │  │     └─ PackBrowserLabels.cs        多语言标签
 │  │  └─ Diagnostics/
 │  │     └─ PluginSelfTest.cs    游戏内自检（--diagnose 使用，不属于功能）
 │  └─ Editor/
@@ -73,12 +80,57 @@ plugins\config.json     ──游戏启动时读取（随时改，不用重建�
 
 ---
 
+### 主界面：卡包浏览
+
+- 位置：主界面左侧菜单底部（「退出」上方）新增一个按钮 **`卡包`**。它由游戏自己的主菜单按钮克隆而来
+  （同一套底板、悬停动画、选中光标和音效），只替换了点击行为。
+- 打开后是**铺满屏幕的卡包墙**：`Data\pack\pack.db` 里的**全部 904 个卡包**，最新的在最前。
+  网格沿用游戏自带的 `SuperScrollView`（回收复用，同屏只实例化约 36 个格子，所以 904 个包也不卡）。
+- **格子的样子**：底板 / 悬停动画 / 选中光标沿用游戏自己的卡组格子 `UI/ItemDeck.prefab`，格子尺寸改成 240×276。
+  游戏那个格子的卡位只在卡组选择器的「抽卡预览」状态才显示，直接用会导致看不到图，所以格子**自己新建图槽**，
+  并按用途分两种形式：
+
+  | 用途 | 图槽 | 加载组件 | 效果 |
+  | --- | --- | --- | --- |
+  | **卡包封面** | 正方形 228×228 | 游戏自带 `ArtRawImageHandler` | 封面卡的**原画**（`Picture/Art` 是 624×624 方形裁切） |
+  | **卡包内的卡片** | 卡片比例 156.4×228 | 游戏自带 `CardRawImageHandler` | **完整卡图**（723×1054 整张卡，和编辑卡组界面的卡表同一个组件） |
+
+  MDPro3 本身没有任何卡包封面美术资源（只有一张筛选用的小图标），所以按你说的做法：
+  用爬取到的封面卡当卡包封面。
+- 封面的选取优先级（构建时已写死在 `PackCoverTable.g.cs`，运行时无需联网 / 无需读 json）：
+
+  | 来源 | 数量 | 说明 |
+  | --- | --- | --- |
+  | 爬取的卡包一览 | 46 | 标题卡名与该包内某张卡能对上（相似度 ≥ 0.90） |
+  | 包内唯一 HR 卡 | 26 | OCG 把 HR（全息闪）只印在封面卡上 |
+  | 包内唯一单标签 QCSE | 6 | 25 周年那批 `-JP000` 封面卡 |
+  | 包内唯一 UL 卡 | 28 | 2004～2007 年补充包的封面卡 |
+  | 爬取数据（宽松匹配） | 31 | 卡名近似（≥ 0.55） |
+  | 代表卡 | 767 | 其余卡包没有公开封面信息，取包内最高罕贵度（优先怪兽）的一张 |
+
+  生成脚本：`data\build_pack_cover_table.py`（读 `data\pack_covers_rekowiki.json` + `pack.db` +
+  `locales/zh-TW/cards.cdb`）。**卡包数变化后重跑一次脚本即可**，不用改插件代码。
+- 交互：
+
+  | 操作 | 结果 |
+  | --- | --- |
+  | 点击卡包 | 换成该卡包的**卡片网格**（封面卡在最前，其后按罕贵度、卡号排序） |
+  | 点击卡片 | 打开游戏原生的卡牌详情，可以用左右键在**整包卡片**里翻页 |
+  | `Esc` / 鼠标右键 | 卡片网格 → 回卡包墙；卡包墙 → 关闭 |
+  | 鼠标滚轮 | 滚动网格 |
+
+- 界面打开期间用游戏自己的 `UIManager.InputBlocker` 阻断主菜单输入，所以按 Esc 不会同时触发菜单返回；
+  打开卡牌详情时浏览器自动让出输入。离开主界面（例如进决斗）浏览器会自动关闭。
+
+---
+
 ## 3. config.json：单功能开关
 
 ```json
 {
   "features": [
-    { "id": "releaseDateSort", "enabled": true, "note": "按卡片发布时间排序" }
+    { "id": "releaseDateSort", "enabled": true, "note": "按卡片发布时间排序" },
+    { "id": "packBrowser", "enabled": true, "note": "主界面卡包浏览" }
   ],
   "logFeatureTicks": false,
   "logEvents": false
