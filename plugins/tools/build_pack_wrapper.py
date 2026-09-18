@@ -18,6 +18,30 @@ OUTPUT = ROOT / "MDPro3Plugins/Resources/MDPro3Plugins/PackBrowser"
 SIZE = (483, 1004)
 WIDTH, HEIGHT = SIZE
 
+COLORS = (
+    ("Gold", (223, 177, 16), (27, 35, 74)),
+    ("Green", (35, 158, 74), (9, 55, 35)),
+    ("Red", (197, 43, 39), (68, 15, 27)),
+    ("Orange", (230, 109, 20), (78, 38, 13)),
+    ("Blue", (42, 117, 207), (15, 38, 86)),
+    ("Purple", (134, 61, 188), (51, 24, 79)),
+    ("Black", (64, 68, 76), (10, 12, 18)),
+    ("Silver", (188, 198, 207), (70, 82, 98)),
+)
+
+BRAND_POLYGONS = (
+    [(130, 760), (351, 760), (243, 941)],
+    [(158, 746), (165, 731), (188, 728), (203, 735), (219, 727),
+     (238, 733), (259, 730), (273, 735), (289, 729), (303, 737),
+     (312, 751), (317, 767), (329, 780), (311, 786), (275, 782),
+     (248, 790), (224, 781), (206, 788), (185, 779), (157, 778)],
+    [(34, 797), (61, 819), (88, 796), (95, 817), (108, 797),
+     (136, 797), (136, 801), (157, 797), (367, 797), (367, 791),
+     (384, 783), (384, 797), (408, 797), (416, 787), (430, 792),
+     (431, 830), (445, 830), (445, 848), (383, 848), (363, 843),
+     (291, 846), (280, 860), (272, 845), (65, 845), (38, 862)],
+)
+
 
 def polygon_mask(polygons):
     scale = 3
@@ -39,16 +63,7 @@ def extract(reference):
         # Lower foil and the wide indigo stripe; the monster area is excluded.
         [(0, 720), (238, 980), (483, 718), (483, 1004), (0, 1004)],
         # The actual crystal triangle and wordmark, including their bevel/shadow.
-        [(130, 760), (351, 760), (243, 941)],
-        [(158, 746), (165, 731), (188, 728), (203, 735), (219, 727),
-         (238, 733), (259, 730), (273, 735), (289, 729), (303, 737),
-         (312, 751), (317, 767), (329, 780), (311, 786), (275, 782),
-         (248, 790), (224, 781), (206, 788), (185, 779), (157, 778)],
-        [(34, 797), (61, 819), (88, 796), (95, 817), (108, 797),
-         (136, 797), (136, 801), (157, 797), (367, 797), (367, 791),
-         (384, 783), (384, 797), (408, 797), (416, 787), (430, 792),
-         (431, 830), (445, 830), (445, 848), (383, 848), (363, 843),
-         (291, 846), (280, 860), (272, 845), (65, 845), (38, 862)],
+        *BRAND_POLYGONS,
     ])
     pack.putalpha(mask)
     clean = Image.new("RGBA", SIZE)
@@ -73,6 +88,45 @@ def foil():
                 source = strip.getpixel((x, y % 40))
                 pixels[x, y] = tuple(round(c * (1 - y / 950)) for c in source) + (255,)
     return image
+
+
+def shade(color, luminance):
+    """Apply the source foil's luminance to one palette color."""
+    factor = 0.38 + luminance / 255.0 * 0.90
+    highlight = max(0.0, (luminance - 185.0) / 70.0) * 38.0
+    return tuple(max(0, min(255, round(channel * factor + highlight))) for channel in color)
+
+
+def recolor_foil(image, main, accent):
+    result = image.copy()
+    source = image.load()
+    pixels = result.load()
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            r, g, b, a = source[x, y]
+            luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            # The top uses a dark metallic version of the accent; the lower seal uses main.
+            mix = max(0.0, min(1.0, (y - 430.0) / 330.0))
+            color = tuple(round(accent[i] * (1.0 - mix) + main[i] * mix) for i in range(3))
+            pixels[x, y] = (*shade(color, luminance), a)
+    return result
+
+
+def recolor_wrapper(image, main, accent):
+    result = image.copy()
+    pixels = result.load()
+    brand = polygon_mask(BRAND_POLYGONS)
+    brand_pixels = brand.load()
+    for y in range(690, HEIGHT):
+        for x in range(WIDTH):
+            r, g, b, a = pixels[x, y]
+            if a == 0 or brand_pixels[x, y] > 24:
+                continue
+            luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            # Blue-dominant pixels are the V stripe; all other printed foil uses main.
+            target = accent if b > r * 0.62 and b > g * 0.70 else main
+            pixels[x, y] = (*shade(target, luminance), a)
+    return result
 
 
 def save(name, image):
@@ -112,13 +166,18 @@ TextureImporter:
 def build():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     backing = foil()
-    save("Foil", backing)
     printed = Image.open(SOURCE / "ReferencePrint.png").convert("RGBA")
     draw = ImageDraw.Draw(printed)
     draw.rectangle((0, 0, WIDTH - 1, HEIGHT - 1), outline="#84784c", width=2)
     draw.line((2, 1, WIDTH - 3, 1), fill="#c3ba8d", width=2)
     draw.line((2, 2, 2, HEIGHT - 3), fill=(219, 213, 163, 175), width=1)
-    save("Wrapper", printed)
+    for name, main, accent in COLORS:
+        if name == "Gold":
+            save("Foil" + name, backing)
+            save("Wrapper" + name, printed)
+        else:
+            save("Foil" + name, recolor_foil(backing, main, accent))
+            save("Wrapper" + name, recolor_wrapper(printed, main, accent))
 
     gloss = Image.new("RGBA", SIZE)
     pixels = gloss.load()

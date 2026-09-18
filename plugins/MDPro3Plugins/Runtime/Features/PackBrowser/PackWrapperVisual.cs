@@ -16,13 +16,19 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private const float ArtHeight = Height * 969f / 1004f;
         private const float ArtTop = Height * 2f / 1004f;
         private const string ResourcePath = "MDPro3Plugins/PackBrowser/";
-        private static Texture2D wrapperTexture;
         private static Texture2D glowTexture;
-        private static Texture2D foilTexture;
         private static Texture2D glossTexture;
+        private static readonly string[] ColorNames =
+        {
+            "Gold", "Green", "Red", "Orange", "Blue", "Purple", "Black", "Silver",
+        };
+        private static Texture2D[] wrapperTextures;
+        private static Texture2D[] foilTextures;
 
         private CanvasGroup glow;
         private bool highlighted;
+        private RawImage foil;
+        private RawImage printedWrapper;
 
         public ArtRawImageHandler Art { get; private set; }
 
@@ -42,14 +48,20 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private void Build()
         {
-            if (wrapperTexture == null)
-                wrapperTexture = Resources.Load<Texture2D>(ResourcePath + "Wrapper");
             if (glowTexture == null)
                 glowTexture = Resources.Load<Texture2D>(ResourcePath + "Glow");
-            if (foilTexture == null)
-                foilTexture = Resources.Load<Texture2D>(ResourcePath + "Foil");
             if (glossTexture == null)
                 glossTexture = Resources.Load<Texture2D>(ResourcePath + "Gloss");
+            if (wrapperTextures == null)
+            {
+                wrapperTextures = new Texture2D[ColorNames.Length];
+                foilTextures = new Texture2D[ColorNames.Length];
+                for (int i = 0; i < ColorNames.Length; i++)
+                {
+                    wrapperTextures[i] = Resources.Load<Texture2D>(ResourcePath + "Wrapper" + ColorNames[i]);
+                    foilTextures[i] = Resources.Load<Texture2D>(ResourcePath + "Foil" + ColorNames[i]);
+                }
+            }
 
             var halo = NewImage("GoldGlow", transform, Width + 40f, Height + 40f, -20f);
             halo.texture = glowTexture;
@@ -58,9 +70,8 @@ namespace MDPro3.Plugins.Features.PackBrowser
             glow.blocksRaycasts = false;
             glow.interactable = false;
 
-            var backing = NewImage("Foil", transform, Width, Height, 0f);
-            backing.texture = foilTexture;
-            var body = backing.rectTransform;
+            foil = NewImage("Foil", transform, Width, Height, 0f);
+            var body = foil.rectTransform;
 
             var picture = NewImage(PackTileItem.ArtObjectName, body, ArtWidth, ArtHeight, ArtTop);
             // ArtRawImageHandler supplies square artwork. Crop the sides to fill the tall bag
@@ -71,8 +82,8 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             var gloss = NewImage("FoilHighlights", body, Width, Height, 0f);
             gloss.texture = glossTexture;
-            var frame = NewImage("PrintedWrapper", body, Width, Height, 0f);
-            frame.texture = wrapperTexture;
+            printedWrapper = NewImage("PrintedWrapper", body, Width, Height, 0f);
+            SetColor(0);
         }
 
         private static RawImage NewImage(string name, Transform parent, float width, float height, float top)
@@ -94,6 +105,14 @@ namespace MDPro3.Plugins.Features.PackBrowser
             highlighted = value;
             if (immediate && glow != null)
                 glow.alpha = value ? 1f : 0f;
+        }
+
+        /// <summary>Cycles gold, green, red, orange, blue, purple, black and silver.</summary>
+        public void SetColor(int sequenceIndex)
+        {
+            int index = ((sequenceIndex % ColorNames.Length) + ColorNames.Length) % ColorNames.Length;
+            foil.texture = foilTextures[index];
+            printedWrapper.texture = wrapperTextures[index];
         }
 
         private void Update()

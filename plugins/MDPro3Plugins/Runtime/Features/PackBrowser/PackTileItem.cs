@@ -263,6 +263,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
                     cardPicture.SetCard((Card)null);
 
                 art.SetArt(code);
+                wrapper.SetColor(entryIndex);
                 wrapper.gameObject.SetActive(true);
                 cardRect.gameObject.SetActive(false);
             }
