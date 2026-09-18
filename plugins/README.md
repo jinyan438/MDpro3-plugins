@@ -43,7 +43,9 @@ plugins/
 │     └─ PluginSelfCheck.cs      编辑器自检（只读导出 UI 结构与插件设置报告）
 ├─ tools/
 │  ├─ plugin-state.ps1           同步 / 签名 / 构建状态 / 文件占用检测 / 读取 config.json
-│  └─ plugin-diagnose.ps1        在构建好的游戏里跑自检
+│  ├─ plugin-diagnose.ps1        在构建好的游戏里跑自检
+│  ├─ pack_covers_rekowiki.json  爬取到的卡包一览（封面卡数据源）
+│  └─ build_pack_cover_table.py  由上面两者生成 PackCoverTable.g.cs
 └─ .state/                       自动生成的状态与日志（可随时删除）
 ```
 
@@ -108,8 +110,9 @@ plugins\config.json     ──游戏启动时读取（随时改，不用重建�
   | 爬取数据（宽松匹配） | 31 | 卡名近似（≥ 0.55） |
   | 代表卡 | 767 | 其余卡包没有公开封面信息，取包内最高罕贵度（优先怪兽）的一张 |
 
-  生成脚本：`data\build_pack_cover_table.py`（读 `data\pack_covers_rekowiki.json` + `pack.db` +
-  `locales/zh-TW/cards.cdb`）。**卡包数变化后重跑一次脚本即可**，不用改插件代码。
+  生成脚本：`plugins\tools\build_pack_cover_table.py`（读同目录的 `pack_covers_rekowiki.json` +
+  `Data\pack\pack.db` + `locales/zh-TW/cards.cdb`，写出 `PackCoverTable.g.cs`）。
+  **卡包数变化后重跑一次脚本即可**，不用改插件代码。
 - 交互：
 
   | 操作 | 结果 |
