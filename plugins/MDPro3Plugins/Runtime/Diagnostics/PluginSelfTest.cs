@@ -1004,8 +1004,25 @@ namespace MDPro3.Plugins.Diagnostics
                 return;
             }
 
-            var label = entry.GetElement<TextMeshProUGUI>("Text");
-            notes.Add("main menu entry: " + entry.name + " -> " + (label != null ? label.text : "no label"));
+            string expectedLabel = PackBrowserLabels.MenuEntry;
+            string[] labelNames = { "Text", "TextOver", "TextShadow" };
+            foreach (string labelName in labelNames)
+            {
+                var label = MainMenuPackEntry.FindText(entry, labelName);
+                if (label == null)
+                {
+                    Fail("the card pack entry has no " + labelName + " label");
+                }
+                else if (!string.Equals(label.text, expectedLabel, StringComparison.Ordinal))
+                {
+                    Fail("the card pack entry " + labelName + " label is '" + label.text
+                        + "' instead of '" + expectedLabel + "'");
+                }
+            }
+
+            var normalLabel = MainMenuPackEntry.FindText(entry, "Text");
+            notes.Add("main menu entry: " + entry.name + " -> "
+                + (normalLabel != null ? normalLabel.text : "no label"));
 
             var button = entry.GetSelectable() as Button;
             if (button == null)

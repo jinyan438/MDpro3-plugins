@@ -5,6 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using YgomSystem.ElementSystem;
 
 namespace MDPro3.Plugins.Features.PackBrowser
 {
@@ -270,9 +271,31 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private static void SetText(SelectionButton button, string label, string text)
         {
-            var element = button.GetElement<TextMeshProUGUI>(label);
+            var element = FindText(button, label);
             if (element != null)
                 element.text = text;
+        }
+
+        /// <summary>
+        /// Finds a labelled text anywhere below the button. TextOver is nested below the hover
+        /// mask and is therefore absent from the button's root ElementObjectManager.
+        /// </summary>
+        internal static TextMeshProUGUI FindText(SelectionButton button, string label)
+        {
+            if (button == null)
+                return null;
+
+            foreach (var element in button.GetComponentsInChildren<ElementObject>(true))
+            {
+                if (element == null || !string.Equals(element.label, label, StringComparison.Ordinal))
+                    continue;
+
+                var text = element.GetComponent<TextMeshProUGUI>();
+                if (text != null)
+                    return text;
+            }
+
+            return null;
         }
 
         /// <summary>
