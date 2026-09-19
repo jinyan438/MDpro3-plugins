@@ -6,6 +6,12 @@ namespace MDPro3.Plugins.Features.PackBrowser
     /// <summary>One pack of Data/pack/pack.db together with the card used as its cover.</summary>
     internal sealed class PackEntry
     {
+        /// <summary>
+        /// True for the virtual pack assembled from the game's MC super-prerelease cards.
+        /// This pack belongs to the All view only and is not a product from pack.db.
+        /// </summary>
+        public bool IsPrerelease;
+
         /// <summary>Card.packFullName, the key used by the generated cover table.</summary>
         public string FullName = string.Empty;
 
@@ -32,16 +38,20 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         public int Count => Cards.Count;
 
-        public string DateText =>
-            Year.ToString("D4") + "-" + Month.ToString("D2") + "-" + Day.ToString("D2");
+        public string DateText => IsPrerelease
+            ? string.Empty
+            : Year.ToString("D4") + "-" + Month.ToString("D2") + "-" + Day.ToString("D2");
 
-        public string CoverSourceText => PackCoverTable.DescribeKind(CoverKind);
+        public string CoverSourceText => IsPrerelease
+            ? PackBrowserLabels.PrereleaseCoverSource
+            : PackCoverTable.DescribeKind(CoverKind);
     }
 
     /// <summary>
     /// Builds the pack list out of the live game data (PacksManager + CardsManager) so it always
-    /// matches Data/pack/pack.db. The cover card comes from the generated wiki table, and for the
-    /// packs the wiki does not list it is derived from the pack rarity data.
+    /// matches Data/pack/pack.db and the currently loaded MC super-prerelease expansion. The cover
+    /// card comes from the generated wiki table, and for packs the wiki does not list it is derived
+    /// from the pack rarity data.
     /// </summary>
     internal static class PackCatalog
     {
@@ -49,7 +59,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private static List<PackEntry> cache;
 
-        /// <summary>All packs, newest first (the order of PacksManager).</summary>
+        /// <summary>The prerelease pack first, followed by all products newest first.</summary>
         public static List<PackEntry> All => cache ?? (cache = Build());
 
         /// <summary>Drops the cache, used when the card database was reloaded.</summary>
@@ -62,9 +72,24 @@ namespace MDPro3.Plugins.Features.PackBrowser
         {
             var result = new List<PackEntry>();
 
+            // This is intentionally a runtime query rather than a card-id table. MDPro3 marks only
+            // test-release*.cdb from the MC ygopro-super-pre package as isPre, so additions,
+            // removals and replacements made by a game data update are reflected automatically.
+            // Category All keeps the virtual pack in "All packs" and out of every product family.
+            var prerelease = new PackEntry
+            {
+                IsPrerelease = true,
+                FullName = "MDPro3Plugins:MCPrerelease",
+                Name = PackBrowserLabels.PrereleasePack,
+                Category = PackCategory.All,
+            };
+
             var cardsByPack = new Dictionary<string, List<int>>();
             foreach (var pair in CardsManager._cards)
             {
+                if (pair.Value.isPre)
+                    prerelease.Cards.Add(pair.Key);
+
                 string full = pair.Value.packFullName;
                 if (string.IsNullOrEmpty(full))
                     continue;
@@ -77,6 +102,14 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
                 list.Add(pair.Key);
             }
+
+            // With no fixed cover table for a changing virtual pack, its rarity/card-number order
+            // defines the cover: the first card among the highest available rarity. Super-pre
+            // cards normally have no pack.db rarity yet, so the game's card rarity is the fallback.
+            SortPrereleaseCards(prerelease);
+            if (prerelease.Cards.Count > 0)
+                prerelease.CoverCard = prerelease.Cards[0];
+            result.Add(prerelease);
 
             foreach (var pack in PacksManager.packs)
             {
@@ -270,6 +303,13 @@ namespace MDPro3.Plugins.Features.PackBrowser
             return best;
         }
 
+        /// <summary>Best available rarity rank for a prerelease card.</summary>
+        internal static int PrereleaseRarityRank(int code)
+        {
+            int packRank = RarityRank(GetRarity(code));
+            return packRank != 0 ? 100 + packRank : (int)CardRarity.GetRarity(code);
+        }
+
         private static bool IsMonster(int code)
         {
             var card = CardsManager.GetCardRaw(code);
@@ -285,6 +325,15 @@ namespace MDPro3.Plugins.Features.PackBrowser
         #endregion
 
         #region Order
+
+        private static void SortPrereleaseCards(PackEntry entry)
+        {
+            entry.Cards.Sort((left, right) =>
+            {
+                int rank = PrereleaseRarityRank(right).CompareTo(PrereleaseRarityRank(left));
+                return rank != 0 ? rank : left.CompareTo(right);
+            });
+        }
 
         /// <summary>Cover card first, then highest rarity, then lowest card id.</summary>
         private static void SortCards(PackEntry entry)

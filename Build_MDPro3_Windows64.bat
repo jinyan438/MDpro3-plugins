@@ -137,8 +137,8 @@ echo   --il2cpp        Use IL2CPP instead of the default Mono backend.
 echo   --compile-only  Only import assets and compile scripts.
 echo   --no-pause      Do not pause before exiting.
 echo.
-echo Deck and replay are only added to: nothing in the build folder is deleted, and an
-echo older project copy never replaces a newer file saved by the game.
+echo Data\config.conf and existing Expansions files are preserved. Deck and replay
+echo keep newer files saved by the game.
 exit /b 0
 
 :FIND_UNITY
@@ -161,13 +161,13 @@ echo.
 echo [MDPro3] Copying runtime data to build folder...
 call :ROBOCOPY_ABSOLUTE_DIR "%ROOT%\StandaloneWindows64" "%BUILD_DIR%\StandaloneWindows64" "StandaloneWindows64"
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
-call :ROBOCOPY_DIR "Data"
+call :ROBOCOPY_DATA
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
 call :ENSURE_ROOT_CDB
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
 call :ROBOCOPY_DIR_KEEP "Deck"
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
-call :ROBOCOPY_DIR "Expansions"
+call :ROBOCOPY_DIR_MISSING "Expansions"
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
 call :ROBOCOPY_DIR "Picture"
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
@@ -208,10 +208,8 @@ if %ROBOCOPY_CODE% GEQ 8 (
 set "EXIT_CODE=0"
 exit /b 0
 
-rem Deck and replay are only added to. The game writes saved decks and replays into
-rem the build folder while it runs, and a mirror sync would delete them as leftovers.
-rem Missing files are copied in, and an older project copy never replaces a newer
-rem file that the game saved in the build folder.
+rem Deck and replay contain files written by the game. Missing files and newer project
+rem updates are copied in, while newer runtime files stay untouched.
 :ROBOCOPY_DIR_KEEP
 set "COPY_NAME=%~1"
 set "COPY_SOURCE=%PROJECT_DIR%\%COPY_NAME%"
@@ -227,6 +225,56 @@ if %ROBOCOPY_CODE% GEQ 8 (
   set "EXIT_CODE=%ROBOCOPY_CODE%"
   echo [MDPro3] Failed to copy %COPY_NAME%. Robocopy exit code: %ROBOCOPY_CODE%
   exit /b %ROBOCOPY_CODE%
+)
+set "EXIT_CODE=0"
+exit /b 0
+
+rem Expansions are updated by the game. Seed files that do not exist in the build yet,
+rem but never replace or delete an existing expansion during a rebuild.
+:ROBOCOPY_DIR_MISSING
+set "COPY_NAME=%~1"
+set "COPY_SOURCE=%PROJECT_DIR%\%COPY_NAME%"
+set "COPY_TARGET=%BUILD_DIR%\%COPY_NAME%"
+if not exist "%COPY_SOURCE%" (
+  echo [MDPro3] Skip missing folder: %COPY_NAME%
+  exit /b 0
+)
+echo [MDPro3] Seed missing %COPY_NAME% files (preserve existing files)
+robocopy "%COPY_SOURCE%" "%COPY_TARGET%" /E /XC /XN /XO /XJ /XD .git /NFL /NDL /NJH /NJS /NP
+set "ROBOCOPY_CODE=%ERRORLEVEL%"
+if %ROBOCOPY_CODE% GEQ 8 (
+  set "EXIT_CODE=%ROBOCOPY_CODE%"
+  echo [MDPro3] Failed to copy %COPY_NAME%. Robocopy exit code: %ROBOCOPY_CODE%
+  exit /b %ROBOCOPY_CODE%
+)
+set "EXIT_CODE=0"
+exit /b 0
+
+rem Data is still mirrored so obsolete databases do not linger, but config.conf is
+rem owned by the running game. It contains the prerelease package version/ETag and
+rem must survive a rebuild or the unchanged package would be offered for download again.
+:ROBOCOPY_DATA
+set "COPY_SOURCE=%PROJECT_DIR%\Data"
+set "COPY_TARGET=%BUILD_DIR%\Data"
+if not exist "%COPY_SOURCE%" (
+  echo [MDPro3] Skip missing folder: Data
+  exit /b 0
+)
+echo [MDPro3] Sync Data (preserve runtime config.conf)
+robocopy "%COPY_SOURCE%" "%COPY_TARGET%" /MIR /XJ /XD .git /XF config.conf /NFL /NDL /NJH /NJS /NP
+set "ROBOCOPY_CODE=%ERRORLEVEL%"
+if %ROBOCOPY_CODE% GEQ 8 (
+  set "EXIT_CODE=%ROBOCOPY_CODE%"
+  echo [MDPro3] Failed to copy Data. Robocopy exit code: %ROBOCOPY_CODE%
+  exit /b %ROBOCOPY_CODE%
+)
+if not exist "%COPY_TARGET%\config.conf" (
+  copy /Y "%COPY_SOURCE%\config.conf" "%COPY_TARGET%\config.conf" >nul
+  if errorlevel 1 (
+    set "EXIT_CODE=1"
+    echo [MDPro3] Failed to copy initial Data\config.conf.
+    exit /b 1
+  )
 )
 set "EXIT_CODE=0"
 exit /b 0

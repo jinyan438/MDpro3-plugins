@@ -1,3 +1,4 @@
+using MDPro3.Duel.YGOSharp;
 using MDPro3.UI;
 using MDPro3.UI.Popup;
 using System;
@@ -226,8 +227,9 @@ namespace MDPro3.Plugins.Features.ReleaseDateSort
         }
 
         /// <summary>
-        /// Orders a card code list by release date. Unknown dates are always put at the end,
-        /// equal dates keep their previous relative order.
+        /// Orders a card code list by release date. Prerelease cards are newer than every dated
+        /// card, unknown non-prerelease dates are always put at the end, and equal groups keep
+        /// their previous relative order.
         /// </summary>
         public List<int> BuildOrder(IList<int> codes, Direction direction)
         {
@@ -238,10 +240,12 @@ namespace MDPro3.Plugins.Features.ReleaseDateSort
             var entries = new List<Entry>(codes.Count);
             for (int i = 0; i < codes.Count; i++)
             {
+                var card = CardsManager.GetCardRaw(codes[i]);
                 entries.Add(new Entry
                 {
                     Code = codes[i],
-                    Key = CardReleaseDate.GetKey(codes[i]),
+                    Key = CardReleaseDate.GetKey(card),
+                    IsPrerelease = CardReleaseDate.IsPrerelease(card),
                     Index = i
                 });
             }
@@ -256,11 +260,16 @@ namespace MDPro3.Plugins.Features.ReleaseDateSort
 
         private static int Compare(Entry left, Entry right, Direction direction)
         {
+            int leftGroup = SortGroup(left, direction);
+            int rightGroup = SortGroup(right, direction);
+            if (leftGroup != rightGroup)
+                return leftGroup.CompareTo(rightGroup);
+
+            if (left.IsPrerelease)
+                return left.Index.CompareTo(right.Index);
+
             bool leftHasDate = CardReleaseDate.HasDate(left.Key);
             bool rightHasDate = CardReleaseDate.HasDate(right.Key);
-
-            if (leftHasDate != rightHasDate)
-                return leftHasDate ? -1 : 1;
 
             if (leftHasDate && left.Key != right.Key)
                 return direction == Direction.NewestFirst
@@ -270,10 +279,20 @@ namespace MDPro3.Plugins.Features.ReleaseDateSort
             return left.Index.CompareTo(right.Index);
         }
 
+        private static int SortGroup(Entry entry, Direction direction)
+        {
+            if (entry.IsPrerelease)
+                return direction == Direction.NewestFirst ? 0 : 1;
+            if (CardReleaseDate.HasDate(entry.Key))
+                return direction == Direction.NewestFirst ? 1 : 0;
+            return 2;
+        }
+
         private struct Entry
         {
             public int Code;
             public long Key;
+            public bool IsPrerelease;
             public int Index;
         }
 

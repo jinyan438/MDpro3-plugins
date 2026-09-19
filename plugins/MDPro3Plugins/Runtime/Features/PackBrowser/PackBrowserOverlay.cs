@@ -144,6 +144,9 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             UIManager.InputBlocker = this;
 
+            // Re-query the live card set on every open. In particular, this keeps the virtual MC
+            // prerelease pack in step with a newly loaded super-prerelease expansion.
+            PackCatalog.Invalidate();
             LoadTiles();
             ShowPacks();
         }
@@ -664,8 +667,8 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 return;
             }
 
-            infoText.text = current.DateText
-                + "  \u00b7  " + current.Count + " " + PackBrowserLabels.Cards
+            infoText.text = (current.IsPrerelease ? string.Empty : current.DateText + "  \u00b7  ")
+                + current.Count + " " + PackBrowserLabels.Cards
                 + "  \u00b7  " + PackBrowserLabels.CoverSource + ": " + current.CoverSourceText;
         }
 
@@ -681,7 +684,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             var entry = packs[focused];
             infoText.text = entry.Name
-                + "  \u00b7  " + entry.DateText
+                + (entry.IsPrerelease ? string.Empty : "  \u00b7  " + entry.DateText)
                 + "  \u00b7  " + entry.Count + " " + PackBrowserLabels.Cards
                 + "  \u00b7  " + PackBrowserLabels.CoverSource + ": " + entry.CoverSourceText;
         }

@@ -21,6 +21,18 @@ namespace MDPro3.Plugins.Features.PackBrowser
             "source de la couverture", "Quelle des Covers", "origine copertina",
             "\u8868\u7d19\u306e\u51fa\u5178", "\ud45c\uc9c0 \ucd9c\ucc98", "\u5c01\u9762\u4f86\u6e90");
 
+        public static string PrereleasePack => Pick("Prerelease pack", "Sobre de prelanzamiento",
+            "Pacote de pre-lancamento", "Pack de pre-lancement", "Vorabkarten-Pack",
+            "Busta anteprima", "\u5148\u884c\u30ab\u30fc\u30c9\u30d1\u30c3\u30af", "\uc120\ud589 \uce74\ub4dc \ud329",
+            "\u5148\u884c\u5361\u5305", "\u5148\u884c\u5361\u5305");
+
+        public static string PrereleaseCoverSource => Pick("first highest-rarity card",
+            "primera carta de mayor rareza", "primeira carta da maior raridade",
+            "premiere carte de la rarete la plus elevee", "erste Karte der hoechsten Seltenheit",
+            "prima carta della rarita piu alta", "\u6700\u9ad8\u30ec\u30a2\u30ea\u30c6\u30a3\u306e\u6700\u521d\u306e\u30ab\u30fc\u30c9",
+            "\ucd5c\uace0 \ub808\uc5b4\ub9ac\ud2f0\uc758 \uccab \uce74\ub4dc", "\u6700\u9ad8\u7f55\u8cb4\u5ea6\u7684\u7b2c\u4e00\u5f35\u5361",
+            "\u6700\u9ad8\u7f55\u8d35\u5ea6\u7684\u7b2c\u4e00\u5f20\u5361");
+
         public static string Empty => Pick("no card data for this pack", "sin datos de cartas",
             "sem dados de cartas", "aucune donnee de carte", "keine Kartendaten",
             "nessun dato delle carte", "\u30ab\u30fc\u30c9\u30c7\u30fc\u30bf\u306a\u3057",

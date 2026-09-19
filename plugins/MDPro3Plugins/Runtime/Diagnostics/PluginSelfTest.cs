@@ -339,6 +339,7 @@ namespace MDPro3.Plugins.Diagnostics
 
             int dated = 0;
             int unknown = 0;
+            int prerelease = 0;
             long newest = 0L;
             long oldest = long.MaxValue;
             int newestCode = 0;
@@ -346,6 +347,12 @@ namespace MDPro3.Plugins.Diagnostics
 
             foreach (var pair in CardsManager._cards)
             {
+                if (CardReleaseDate.IsPrerelease(pair.Value))
+                {
+                    prerelease++;
+                    continue;
+                }
+
                 long key = CardReleaseDate.GetKey(pair.Key);
                 if (!CardReleaseDate.HasDate(key))
                 {
@@ -367,6 +374,7 @@ namespace MDPro3.Plugins.Diagnostics
             }
 
             notes.Add("cards with release date: " + dated + " (without: " + unknown + ")");
+            notes.Add("prerelease cards sorted ahead of dated cards: " + prerelease);
             if (dated > 0)
             {
                 notes.Add("oldest: " + oldestCode + " " + CardReleaseDate.FormatKey(oldest));
@@ -388,15 +396,20 @@ namespace MDPro3.Plugins.Diagnostics
             if (unknownCode == 0)
                 notes.Add("no card without release date found, unknown date handling not checked");
 
-            var input = new List<int> { middleCode, unknownCode, oldCode, newCode };
+            int prereleaseCode = FindPrereleaseCode();
+            if (prereleaseCode == 0)
+                notes.Add("no prerelease card found, prerelease date handling not checked");
+
+            var input = new List<int> { middleCode, unknownCode, oldCode, prereleaseCode, newCode };
             var newestFirst = feature.BuildOrder(input, ReleaseDateSortFeature.Direction.NewestFirst);
             var oldestFirst = feature.BuildOrder(input, ReleaseDateSortFeature.Direction.OldestFirst);
 
             notes.Add("newest first: " + Describe(newestFirst));
             notes.Add("oldest first: " + Describe(oldestFirst));
 
-            if (newestFirst.Count == 0 || newestFirst[0] != newCode)
-                Fail("newest card is not the first entry of the descending sort");
+            int expectedNewest = prereleaseCode != 0 ? prereleaseCode : newCode;
+            if (newestFirst.Count == 0 || newestFirst[0] != expectedNewest)
+                Fail("prerelease/newest card is not the first entry of the descending sort");
 
             if (oldestFirst.Count == 0 || oldestFirst[0] != oldCode)
                 Fail("oldest card is not the first entry of the ascending sort");
@@ -404,6 +417,15 @@ namespace MDPro3.Plugins.Diagnostics
             if (unknownCode != 0 && (newestFirst[newestFirst.Count - 1] != unknownCode
                 || oldestFirst[oldestFirst.Count - 1] != unknownCode))
                 Fail("a card without release date is not put at the end");
+
+            if (prereleaseCode != 0)
+            {
+                if (newestFirst.IndexOf(prereleaseCode) > newestFirst.IndexOf(newCode))
+                    Fail("a prerelease card is not ahead of dated cards in the descending sort");
+                if (oldestFirst.IndexOf(prereleaseCode) < oldestFirst.IndexOf(newCode)
+                    || (unknownCode != 0 && oldestFirst.IndexOf(prereleaseCode) > oldestFirst.IndexOf(unknownCode)))
+                    Fail("a prerelease card is not between dated and unknown cards in the ascending sort");
+            }
 
             if (newestFirst.Count != input.Count || oldestFirst.Count != input.Count)
                 Fail("the sort dropped entries");
@@ -441,7 +463,17 @@ namespace MDPro3.Plugins.Diagnostics
         private static int FindCodeWithoutDate()
         {
             foreach (var pair in CardsManager._cards)
-                if (!CardReleaseDate.HasDate(CardReleaseDate.GetKey(pair.Key)))
+                if (!CardReleaseDate.IsPrerelease(pair.Value)
+                    && !CardReleaseDate.HasDate(CardReleaseDate.GetKey(pair.Value)))
+                    return pair.Key;
+
+            return 0;
+        }
+
+        private static int FindPrereleaseCode()
+        {
+            foreach (var pair in CardsManager._cards)
+                if (CardReleaseDate.IsPrerelease(pair.Value))
                     return pair.Key;
 
             return 0;
@@ -454,7 +486,9 @@ namespace MDPro3.Plugins.Diagnostics
             {
                 sb.Append(code);
                 sb.Append('(');
-                sb.Append(CardReleaseDate.FormatKey(CardReleaseDate.GetKey(code)));
+                sb.Append(CardReleaseDate.IsPrerelease(code)
+                    ? "prerelease"
+                    : CardReleaseDate.FormatKey(CardReleaseDate.GetKey(code)));
                 sb.Append(") ");
             }
             return sb.ToString().TrimEnd();
@@ -768,10 +802,19 @@ namespace MDPro3.Plugins.Diagnostics
             if (codes == null || codes.Count == 0)
                 return "the printed card list is empty";
 
+            bool datedSeen = false;
             bool unknownSeen = false;
             long previousKey = long.MaxValue;
             for (int i = 0; i < codes.Count; i++)
             {
+                if (CardReleaseDate.IsPrerelease(codes[i]))
+                {
+                    if (datedSeen || unknownSeen)
+                        return "prerelease card " + codes[i]
+                            + " is placed after a dated or unknown card (index " + i + ")";
+                    continue;
+                }
+
                 long key = CardReleaseDate.GetKey(codes[i]);
                 if (!CardReleaseDate.HasDate(key))
                 {
@@ -782,6 +825,8 @@ namespace MDPro3.Plugins.Diagnostics
                 if (unknownSeen)
                     return "card " + codes[i] + " with date " + CardReleaseDate.FormatKey(key)
                         + " is placed after a card without date (index " + i + ")";
+
+                datedSeen = true;
 
                 if (key > previousKey)
                     return "card " + codes[i] + " with date " + CardReleaseDate.FormatKey(key)
@@ -821,23 +866,64 @@ namespace MDPro3.Plugins.Diagnostics
             if (PackCoverTable.Count == 0)
                 Fail("the generated pack cover table is empty");
 
-            if (catalog.Count != PacksManager.packs.Count)
-                Fail("the pack catalog does not match PacksManager");
+            if (catalog.Count != PacksManager.packs.Count + 1)
+                Fail("the pack catalog does not contain exactly one virtual pack in addition to PacksManager");
+            if (catalog.Count == 0 || !catalog[0].IsPrerelease)
+                Fail("the prerelease pack is not the first entry in All packs");
 
             var kinds = new int[7];
             int withoutCover = 0;
             int coverOutsidePack = 0;
             int withCards = 0;
+            int prereleasePacks = 0;
+            int expectedPrereleaseCards = 0;
             PackEntry sample = null;
+
+            foreach (var pair in CardsManager._cards)
+                if (pair.Value.isPre)
+                    expectedPrereleaseCards++;
 
             foreach (var entry in catalog)
             {
+                if (entry.IsPrerelease)
+                {
+                    prereleasePacks++;
+                    if (entry.Category != PackCategory.All)
+                        Fail("the prerelease pack is visible outside the All category");
+                    if (entry.Count != expectedPrereleaseCards)
+                        Fail("the prerelease pack has " + entry.Count + " cards instead of " + expectedPrereleaseCards);
+                    foreach (int code in entry.Cards)
+                    {
+                        var card = CardsManager.GetCardRaw(code);
+                        if (card == null || !card.isPre)
+                        {
+                            Fail("the prerelease pack contains a non-prerelease card: " + code);
+                            break;
+                        }
+                    }
+                    if (entry.Count == 0 && entry.CoverCard != 0)
+                        Fail("the empty prerelease pack has a cover card");
+                    if (entry.Count > 0)
+                    {
+                        if (entry.CoverCard != entry.Cards[0])
+                            Fail("the prerelease cover is not the first card");
+                        int coverRank = PackCatalog.PrereleaseRarityRank(entry.CoverCard);
+                        foreach (int code in entry.Cards)
+                            if (PackCatalog.PrereleaseRarityRank(code) > coverRank)
+                            {
+                                Fail("the prerelease cover does not have the highest available rarity");
+                                break;
+                            }
+                    }
+                }
+
                 if (entry.Count > 0)
                     withCards++;
 
                 if (entry.CoverCard == 0)
                 {
-                    withoutCover++;
+                    if (!entry.IsPrerelease || entry.Count > 0)
+                        withoutCover++;
                     continue;
                 }
 
@@ -853,6 +939,10 @@ namespace MDPro3.Plugins.Diagnostics
 
             notes.Add("packs with card data: " + withCards + ", without: " + (catalog.Count - withCards));
             notes.Add("packs without a cover card: " + withoutCover);
+            notes.Add("MC prerelease cards: " + expectedPrereleaseCards);
+
+            if (prereleasePacks != 1)
+                Fail("the catalog contains " + prereleasePacks + " prerelease packs instead of one");
 
             for (int kind = 1; kind < kinds.Length; kind++)
                 if (kinds[kind] > 0)
@@ -1104,8 +1194,12 @@ namespace MDPro3.Plugins.Diagnostics
                 notes.Add("pack category " + category + ": " + expected);
             }
 
-            if (total != catalog.Count)
-                Fail("pack categories do not cover the full catalog exactly once");
+            int allOnly = 0;
+            foreach (var entry in catalog)
+                if (entry.Category == PackCategory.All)
+                    allOnly++;
+            if (allOnly != 1 || total + allOnly != catalog.Count)
+                Fail("product categories plus the All-only prerelease pack do not cover the catalog exactly once");
             overlay.SelectCategory(PackCategory.All);
             if (overlay.PackCount != catalog.Count || overlay.TileCount != catalog.Count)
                 Fail("selecting all packs did not restore the catalog");

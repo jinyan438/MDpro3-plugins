@@ -9,7 +9,9 @@ namespace MDPro3.Plugins.Features.ReleaseDateSort
     /// (table "pack") and PacksManager writes the parsed date into
     /// Card.year / Card.month / Card.day. Those are the very same values the game
     /// shows in the card detail view, so sorting by them stays consistent with the UI.
-    /// Cards without pack information have year == 0 and are treated as unknown.
+    /// Cards without pack information have year == 0 and are treated as unknown. MC prerelease
+    /// cards are identified separately through Card.isPre because they intentionally have no
+    /// official pack date yet.
     /// </summary>
     public static class CardReleaseDate
     {
@@ -29,6 +31,16 @@ namespace MDPro3.Plugins.Features.ReleaseDateSort
             int month = card.month > 0 ? card.month : 0;
             int day = card.day > 0 ? card.day : 0;
             return (long)card.year * 10000L + month * 100L + day;
+        }
+
+        public static bool IsPrerelease(int code)
+        {
+            return IsPrerelease(CardsManager.GetCardRaw(code));
+        }
+
+        public static bool IsPrerelease(Card card)
+        {
+            return card != null && card.isPre;
         }
 
         public static bool HasDate(long key)
