@@ -82,13 +82,27 @@ namespace MDPro3.Plugins.Diagnostics
                     for (int i = 1; i < feature.Packs.Count; i++)
                         Check(string.CompareOrdinal(feature.Packs[i - 1].DateText, feature.Packs[i].DateText) <= 0, "pack chronology");
                     character = CharacterSelector.characters.dm.First(c => !c.notReady).id;
-                    feature.SaveDeck(character, StoryCatalog.Starter());
+                    Check(feature.SaveDeck(character, 1, StoryCatalog.Starter()), "level one opponent deck configured");
+                    Check(feature.SaveDeck(character, 7, StoryCatalog.Starter()), "level seven opponent deck configured");
+                    Check(!feature.Store.Current.TryGetOpponent(character, 2, out _), "unconfigured level remains absent");
+                    feature.Challenge(character, 2);
+                    Check(!feature.Launching, "unconfigured level cannot start a challenge");
                     var setup = feature.Store.Current.Copy(); setup.dp = 400; setup.completedDuels = 0; setup.wins = 0;
                     feature.Store.Commit(setup);
                     nativeFilesBefore = DeckFiles();
                     UnityEngine.Object.FindFirstObjectByType<StoryOverlay>().RefreshStats();
                     Advance(1, 3); break;
                 case 1:
+                    for (int difficulty = StoryProgress.MinLevel; difficulty <= StoryProgress.MaxLevel; difficulty++)
+                    {
+                        string buttonName = "Difficulty" + difficulty;
+                        Check(UnityEngine.Object.FindObjectsByType<Button>(FindObjectsSortMode.None)
+                            .Any(b => b.gameObject.activeInHierarchy && b.name == buttonName), "difficulty button available: " + difficulty);
+                    }
+                    UnityEngine.Object.FindObjectsByType<Button>(FindObjectsSortMode.None)
+                        .First(b => b.gameObject.activeInHierarchy && b.name == "Difficulty7").onClick.Invoke();
+                    Check(UnityEngine.Object.FindObjectsByType<Button>(FindObjectsSortMode.None)
+                        .Any(b => b.gameObject.activeInHierarchy && b.name == "挑战 7级 · 胜利 +700 DP"), "configured level is selectable");
                     if (!Capture("01-characters")) return;
                     Click("我的卡组"); Advance(2, 3); break;
                 case 2:
@@ -129,7 +143,7 @@ namespace MDPro3.Plugins.Diagnostics
                 case 20:
                     Check(PluginGame.CurrentServant is MainMenu && StoryDeckEditor.Active == null, "native editor returns to story and restores context");
                     Check(DeckFiles() == nativeFilesBefore, "story save never writes ordinary deck files");
-                    feature.EditDeck(character); Advance(3, 3); break;
+                    feature.EditDeck(character, 1); Advance(3, 3); break;
                 case 3:
                     if (!EditorReady()) return;
                     if (!Capture("03-character-deck")) return;
@@ -137,7 +151,10 @@ namespace MDPro3.Plugins.Diagnostics
                     Check(enemyEditor.CardCollectionView.printedCards.Contains(unowned), "opponent native collection includes unowned cards");
                     Check(enemyEditor.DeckView.AddCard(CardsManager.Get(unowned), false, false), "opponent may add full-pool card");
                     enemyEditor.OnSave();
-                    Check(feature.Store.Current.opponents[character].All().Contains(unowned), "native save targets selected character");
+                    Check(feature.Store.Current.TryGetOpponent(character, 1, out var savedLevelOne)
+                        && savedLevelOne.All().Contains(unowned), "native save targets selected character level");
+                    Check(feature.Store.Current.TryGetOpponent(character, 7, out var savedLevelSeven)
+                        && !savedLevelSeven.All().Contains(unowned), "editing level one preserves level seven");
                     Check(feature.Store.Current.player.ToYdk() == savedPlayer, "opponent editing preserves player deck");
                     enemyEditor.DeckView.AddCard(CardsManager.Get(unowned), false, false);
                     Program.instance.deckEditor.OnReturn(); Advance(28, 1); break;
@@ -146,8 +163,9 @@ namespace MDPro3.Plugins.Diagnostics
                     Check(confirm != null, "native dirty editor offers save on return");
                     confirm.decideAction.Invoke(); confirm.Hide(); Advance(29, 2); break;
                 case 29:
-                    Check(feature.Store.Current.opponents[character].Count(unowned) == 2, "native save and return commits opponent deck");
-                    feature.EditDeck(character); Advance(30, 3); break;
+                    Check(feature.Store.Current.TryGetOpponent(character, 1, out var returnedLevelOne)
+                        && returnedLevelOne.Count(unowned) == 2, "native save and return commits selected level");
+                    feature.EditDeck(character, 1); Advance(30, 3); break;
                 case 30:
                     if (!EditorReady()) return;
                     Program.instance.deckEditor.GetUI<DeckEditorUI>().DeckView.AddCard(CardsManager.Get(unowned), false, false);
@@ -157,7 +175,10 @@ namespace MDPro3.Plugins.Diagnostics
                     Check(discard != null, "native dirty return asks before discarding");
                     discard.cancelAction.Invoke(); discard.Hide(); Advance(22, 2); break;
                 case 22:
-                    Check(feature.Store.Current.opponents[character].Count(unowned) == 2, "discard preserves last saved opponent deck");
+                    Check(feature.Store.Current.TryGetOpponent(character, 1, out var discardedLevelOne)
+                        && discardedLevelOne.Count(unowned) == 2, "discard preserves last saved opponent level");
+                    Check(feature.Store.Current.TryGetOpponent(character, 7, out var untouchedLevelSeven)
+                        && !untouchedLevelSeven.All().Contains(unowned), "other opponent level remains unchanged");
                     // Ordinary native editor must regain its full card collection and original behavior.
                     UnityEngine.Object.FindFirstObjectByType<StoryOverlay>().Close();
                     DeckEditor.condition = DeckEditor.Condition.EditDeck;
@@ -194,7 +215,7 @@ namespace MDPro3.Plugins.Diagnostics
                     if (Environment.GetCommandLineArgs().Contains("-story-visual-only"))
                     { Finish(true, "UI, collection and shop visual checks passed (duels skipped)."); return; }
                     beforeDuels = feature.Store.Current.completedDuels; beforeDp = feature.Store.Current.dp;
-                    feature.Challenge(character); Advance(8, 1); break;
+                    feature.Challenge(character, testingWin ? 7 : 1); Advance(8, 1); break;
                 case 8:
                     if (PluginGame.CurrentServant == Program.instance.room)
                         Check(!Program.instance.ui_.chatPanel.showing, "story room does not auto-open chat panel");
@@ -231,8 +252,9 @@ namespace MDPro3.Plugins.Diagnostics
                     Advance(10, 4); break;
                 case 10:
                     if (feature.Store.Current.completedDuels == beforeDuels) return;
-                    Check(feature.Store.Current.completedDuels == beforeDuels + 1, "real loss increments duel count exactly once");
-                    Check(feature.Store.Current.dp == beforeDp + (testingWin ? feature.Rules.winDP : 0), "real outcome grants correct DP");
+                    Check(feature.Store.Current.completedDuels == beforeDuels + 1, "real challenge increments duel count exactly once");
+                    Check(feature.Store.Current.dp == beforeDp + (testingWin ? feature.Rules.WinReward(7) : 0),
+                        "level seven victory grants scaled DP");
                     if (!Capture(testingWin ? "10-victory" : "07-result")) return;
                     Program.instance.ocgcore.OnDuelResultConfirmed(true);
                     Advance(11, 4); break;
@@ -247,7 +269,7 @@ namespace MDPro3.Plugins.Diagnostics
                         testingWin = true; surrendered = false; testBot = null; lastPopup = null;
                         Advance(7, 1);
                     }
-                    else Finish(true, "UI, closed story chat panel, collection, purchase, live AI loss/win rewards, repeated challenge and return passed.");
+                    else Finish(true, "UI, optional difficulty decks, scaled DP, closed story chat panel, collection, purchase, live AI challenges and return passed.");
                     break;
             }
         }

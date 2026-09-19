@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MDPro3.Plugins.Features.StoryMode;
+using Newtonsoft.Json;
 
 internal static class StoryModeTests
 {
@@ -33,9 +34,25 @@ internal static class StoryModeTests
         Expect(rules.RequiredDuels(5) == 3 && rules.RequiredDuels(6) == 6, "chronological unlock thresholds");
         var grouped = new StoryRules { packsPerUnlock = 2 };
         Expect(grouped.RequiredDuels(5) == 3 && grouped.RequiredDuels(6) == 3 && grouped.RequiredDuels(7) == 6, "group unlocks");
+        Expect(rules.WinReward(1) == 100 && rules.WinReward(2) == 200 && rules.WinReward(10) == 1000,
+            "difficulty scales win reward");
+        Reject(() => rules.WinReward(0), "level zero reward rejected");
+        Reject(() => rules.WinReward(11), "level eleven reward rejected");
         Reject(() => new StoryRules { packPrice = 0 }.Validate(), "invalid price rejected");
         var save = StorySave.New(Starter());
         Expect(save.dp == 0 && save.owned.Values.Sum() == 40, "initial ownership granted once");
+        var levelOne = Starter();
+        var levelSeven = Starter(); levelSeven.main[0] = 22;
+        save.SetOpponent("0001", 1, levelOne);
+        save.SetOpponent("0001", 7, levelSeven);
+        levelSeven.main[0] = 23;
+        Expect(save.TryGetOpponent("0001", 1, out var storedOne) && storedOne.main[0] == 1,
+            "level one opponent deck stored");
+        Expect(save.TryGetOpponent("0001", 7, out var storedSeven) && storedSeven.main[0] == 22,
+            "level seven opponent deck stored independently by copy");
+        Expect(!save.TryGetOpponent("0001", 2, out _), "unconfigured opponent level remains absent");
+        Reject(() => save.SetOpponent("0001", 0, Starter()), "level zero deck rejected");
+        Reject(() => save.SetOpponent("0001", 11, Starter()), "level eleven deck rejected");
         Expect(Validate(save.player, save) == null, "starter is playable");
         var deck = save.player.Copy(); deck.main.RemoveAt(0);
         Expect(Validate(deck, save) != null, "short deck rejected");
@@ -58,20 +75,28 @@ internal static class StoryModeTests
         Expect(Validate(deck) != null, "missing card rejected");
         Reject(() => StoryProgress.Buy(save, rules, 0, new[] { 25 }, _ => 0), "no free packs");
         Expect(save.dp == 0 && !save.owned.ContainsKey(25), "failed purchase has no side effects");
-        Expect(StoryProgress.Settle(save, rules, "a", "0001", true), "win counted");
+        int beforeInvalidDuels = save.completedDuels;
+        Reject(() => StoryProgress.Settle(save, rules, "invalid-low", "0001", 0, true), "level zero settlement rejected");
+        Reject(() => StoryProgress.Settle(save, rules, "invalid-high", "0001", 11, true), "level eleven settlement rejected");
+        Expect(save.dp == 0 && save.completedDuels == beforeInvalidDuels && save.lastSettledDuel == "",
+            "invalid levels do not mutate progress");
+        Expect(StoryProgress.Settle(save, rules, "a", "0001", 1, true), "level one win counted");
         Expect(save.dp == 100 && save.wins == 1 && save.completedDuels == 1, "win rewards");
-        Expect(!StoryProgress.Settle(save, rules, "a", "0001", true) && save.dp == 100, "duplicate result ignored");
+        Expect(!StoryProgress.Settle(save, rules, "a", "0001", 10, true) && save.dp == 100, "duplicate result ignored");
         Reject(() => StoryProgress.Buy(save, rules, 5, new[] { 25 }, _ => 0), "locked pack rejected");
         Reject(() => StoryProgress.Buy(save, rules, -1, new[] { 25 }, _ => 0), "foreign pack rejected");
         Reject(() => StoryProgress.Buy(save, rules, 0, new int[0], _ => 0), "empty pack rejected");
         var draw = StoryProgress.Buy(save, rules, 0, new[] { 25 }, _ => 0);
         Expect(draw.Count == 3 && save.owned[25] == 3 && save.dp == 0, "exactly three, repeats accumulate");
-        StoryProgress.Settle(save, rules, "b", "0001", false);
-        StoryProgress.Settle(save, rules, "c", "0001", false);
+        StoryProgress.Settle(save, rules, "b", "0001", 2, false);
+        StoryProgress.Settle(save, rules, "c", "0001", 10, false);
         Expect(save.completedDuels == 3 && save.dp == 0 && save.wins == 1, "loss/draw progress without DP");
-        StoryProgress.Settle(save, rules, "d", "0001", true);
+        StoryProgress.Settle(save, rules, "d", "0001", 2, true);
         StoryProgress.Buy(save, rules, 5, new[] { 25 }, _ => 0);
-        Expect(save.owned[25] == 6, "unlock boundary purchase and duplicates after three");
+        Expect(save.owned[25] == 6 && save.dp == 100, "level two reward and unlock boundary purchase");
+        var topReward = StorySave.New(Starter());
+        StoryProgress.Settle(topReward, rules, "top", "0001", 10, true);
+        Expect(topReward.dp == 1000, "level ten settlement grants one thousand DP");
 
         var packets = new StoryDuelPackets();
         packets.Observe(new byte[] { 1, 5, 0, 1 }); Expect(!packets.Finished, "win without started challenge ignored");
@@ -93,10 +118,34 @@ internal static class StoryModeTests
         Directory.CreateDirectory(root);
         var store = new StoryStore(Path.Combine(root, Guid.NewGuid().ToString("N")));
         store.Load(Starter);
-        var next = store.Current.Copy(); StoryProgress.Settle(next, rules, "saved", "0001", true); store.Commit(next);
+        var next = store.Current.Copy(); StoryProgress.Settle(next, rules, "saved", "0001", 1, true); store.Commit(next);
         var loaded = new StoryStore(store.DirectoryPath); loaded.Load(() => throw new Exception("starter must not be re-granted"));
         Expect(loaded.Current.dp == 100 && loaded.Current.owned.Values.Sum() == 40, "restart preserves economy");
-        Expect(!StoryProgress.Settle(loaded.Current, rules, "saved", "0001", true), "settlement id persisted");
+        Expect(!StoryProgress.Settle(loaded.Current, rules, "saved", "0001", 1, true), "settlement id persisted");
+
+        string migrationPath = Path.Combine(root, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(migrationPath);
+        var legacyDeck = Starter(); legacyDeck.main[0] = 22;
+        File.WriteAllText(Path.Combine(migrationPath, "progress.json"), JsonConvert.SerializeObject(new
+        {
+            version = 1,
+            dp = 350,
+            completedDuels = 4,
+            wins = 2,
+            lastSettledDuel = "legacy",
+            owned = StorySave.New(Starter()).owned,
+            player = Starter(),
+            opponents = new Dictionary<string, StoryDeck> { { "0002", legacyDeck } },
+            characterWins = new Dictionary<string, int> { { "0002", 2 } }
+        }));
+        var migrated = new StoryStore(migrationPath); migrated.Load(() => throw new Exception("migration must retain starter"));
+        Expect(migrated.Current.version == StorySave.CurrentVersion && migrated.Current.dp == 350
+            && migrated.LoadNotice != null, "version one save migrates with progress");
+        Expect(migrated.Current.TryGetOpponent("0002", 1, out var migratedDeck) && migratedDeck.main[0] == 22
+            && !migrated.Current.TryGetOpponent("0002", 2, out _), "legacy opponent deck migrates to level one only");
+        migrated = new StoryStore(migrationPath); migrated.Load(() => throw new Exception("migrated save must reload"));
+        Expect(migrated.Current.version == StorySave.CurrentVersion
+            && migrated.Current.TryGetOpponent("0002", 1, out _), "migrated version two save persists");
         File.WriteAllText(store.SavePath, "{bad json");
         loaded = new StoryStore(store.DirectoryPath); loaded.Load(Starter);
         Expect(loaded.Current.dp == 0 && loaded.LoadNotice != null, "backup recovery, no silent reset");

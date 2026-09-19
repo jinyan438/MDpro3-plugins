@@ -18,6 +18,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal static StoryDeckEditor Active { get; private set; }
         internal readonly StoryModeFeature Owner;
         internal readonly string Character;
+        internal readonly int Level;
         internal readonly Banlist Banlist = new Banlist { Name = "故事模式" };
         internal DeckEditorUI UI;
         internal bool HandTestStarted;
@@ -34,9 +35,9 @@ namespace MDPro3.Plugins.Features.StoryMode
         private bool entered;
         private bool initialized;
 
-        internal StoryDeckEditor(StoryModeFeature owner, string character)
+        internal StoryDeckEditor(StoryModeFeature owner, string character, int level)
         {
-            Owner = owner; Character = character;
+            Owner = owner; Character = character; Level = level;
             previousDeck = DeckEditor.Deck; previousName = DeckEditor.DeckName;
             previousLocal = DeckEditor.DeckIsFromLocal; previousCondition = DeckEditor.condition;
             previousHistory = DeckEditor.historyCards; previousOnlineId = DeckEditor.onlineDeckID;
@@ -54,12 +55,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (!StoryDeckEditorHooks.Installed())
                 throw new InvalidOperationException("故事模式编辑器接入尚未编译，请重建插件后再试。");
             var draft = Character == null ? Owner.Store.Current.player
-                : Owner.Store.Current.opponents.TryGetValue(Character, out var saved) ? saved : new StoryDeck();
+                : Owner.Store.Current.TryGetOpponent(Character, Level, out var saved) ? saved : new StoryDeck();
             Active = this;
             DeckEditor.condition = DeckEditor.Condition.EditDeck;
             DeckEditor.Deck = ToGame(draft);
             DeckEditor.DeckName = Character == null ? "故事模式 · 我的卡组"
-                : "故事模式 · " + CharacterSelector.characters.GetName(Character);
+                : "故事模式 · " + CharacterSelector.characters.GetName(Character) + " · " + Level + "级";
             DeckEditor.DeckIsFromLocal = true;
             DeckEditor.onlineDeckID = null;
             DeckEditor.historyCards = new List<int>();
@@ -117,7 +118,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (!view.deckLoaded) return false;
             var deck = FromGame(view.FromObjectDeckToCodedDeck());
-            if (!Owner.SaveDeck(Character, deck)) return false;
+            if (!Owner.SaveDeck(Character, Level, deck)) return false;
             // Separate objects: native YDKE import mutates DeckView.Deck before printing.
             view.Deck = ToGame(deck); DeckEditor.Deck = ToGame(deck);
             view.SetDirty(false);
@@ -238,7 +239,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 new List<Action> { null,
                     () => {
                         var original = session.Character == null ? session.Owner.Store.Current.player
-                            : session.Owner.Store.Current.opponents.TryGetValue(session.Character, out var saved) ? saved : new StoryDeck();
+                            : session.Owner.Store.Current.TryGetOpponent(session.Character, session.Level, out var saved) ? saved : new StoryDeck();
                         ui.DeckView.PrintDeck(StoryDeckEditor.ToGame(original), DeckEditor.DeckName, DeckView.Condition.Editable);
                     }, ui.OnRandom, () => ui.DeckView.ClearDeck(),
                     () => ui.DeckView.ImportCardLists(StoryDeckEditor.ToGame(StoryCatalog.Starter())),
@@ -259,7 +260,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             name.readOnly = true;
             ui.DeckView.ButtonDeck.gameObject.SetActive(false);
             ui.Manager.GetNestedElement("AppearanceGroup").SetActive(false);
-            StoryUI.Text(ui.transform, session.Character == null ? "故事模式 · 持有卡池" : "故事模式 · 角色全卡库",
+            StoryUI.Text(ui.transform, session.Character == null ? "故事模式 · 持有卡池"
+                : "故事模式 · 角色全卡库 · " + session.Level + "级",
                 .055f, .936f, .34f, .045f, 25);
         }
     }

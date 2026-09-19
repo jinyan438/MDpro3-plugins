@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace MDPro3.Plugins.Features.StoryMode
 {
@@ -26,6 +27,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (packIndex < initialPacks) return 0;
             long value = ((long)(packIndex - initialPacks) / packsPerUnlock + 1) * duelsPerUnlock;
             return (int)Math.Min(int.MaxValue, value);
+        }
+
+        public int WinReward(int level)
+        {
+            if (!StoryProgress.ValidLevel(level)) throw new ArgumentOutOfRangeException(nameof(level));
+            return checked(winDP * level);
         }
     }
 
@@ -59,14 +66,15 @@ namespace MDPro3.Plugins.Features.StoryMode
     [Serializable]
     public sealed class StorySave
     {
-        public int version = 1;
+        public const int CurrentVersion = 2;
+        public int version = CurrentVersion;
         public int dp;
         public int completedDuels;
         public int wins;
         public string lastSettledDuel = "";
         public Dictionary<int, int> owned = new Dictionary<int, int>();
         public StoryDeck player = new StoryDeck();
-        public Dictionary<string, StoryDeck> opponents = new Dictionary<string, StoryDeck>();
+        public Dictionary<string, Dictionary<int, StoryDeck>> opponents = new Dictionary<string, Dictionary<int, StoryDeck>>();
         public Dictionary<string, int> characterWins = new Dictionary<string, int>();
         public StorySave Copy() => JsonConvert.DeserializeObject<StorySave>(JsonConvert.SerializeObject(this));
 
@@ -78,17 +86,40 @@ namespace MDPro3.Plugins.Features.StoryMode
             return save;
         }
 
+        public bool TryGetOpponent(string character, int level, out StoryDeck deck)
+        {
+            deck = null;
+            return !string.IsNullOrEmpty(character) && StoryProgress.ValidLevel(level)
+                && opponents.TryGetValue(character, out var levels) && levels != null
+                && levels.TryGetValue(level, out deck) && deck != null;
+        }
+
+        public void SetOpponent(string character, int level, StoryDeck deck)
+        {
+            if (string.IsNullOrEmpty(character) || !StoryProgress.ValidLevel(level) || deck == null)
+                throw new ArgumentException("角色、难度或卡组无效。");
+            if (!opponents.TryGetValue(character, out var levels) || levels == null)
+                opponents[character] = levels = new Dictionary<int, StoryDeck>();
+            levels[level] = deck.Copy();
+        }
+
         public void Validate()
         {
-            if (version != 1 || dp < 0 || completedDuels < 0 || wins < 0 || wins > completedDuels
+            if (version != CurrentVersion || dp < 0 || completedDuels < 0 || wins < 0 || wins > completedDuels
                 || player == null || player.main == null || player.extra == null || player.side == null
                 || owned == null || owned.Count == 0 || opponents == null || characterWins == null)
                 throw new InvalidDataException("故事存档结构无效或版本不受支持。");
             foreach (var pair in owned)
                 if (pair.Key <= 0 || pair.Value <= 0) throw new InvalidDataException("持有卡片数据无效。");
-            foreach (var pair in opponents)
-                if (pair.Value == null || pair.Value.main == null || pair.Value.extra == null || pair.Value.side == null)
+            foreach (var character in opponents)
+            {
+                if (string.IsNullOrEmpty(character.Key) || character.Value == null)
                     throw new InvalidDataException("角色卡组数据无效。");
+                foreach (var level in character.Value)
+                    if (!StoryProgress.ValidLevel(level.Key) || level.Value == null || level.Value.main == null
+                        || level.Value.extra == null || level.Value.side == null)
+                        throw new InvalidDataException("角色卡组难度数据无效。");
+            }
         }
     }
 
@@ -96,6 +127,10 @@ namespace MDPro3.Plugins.Features.StoryMode
     public static class StoryProgress
     {
         public const int CardsPerPack = 3;
+        public const int MinLevel = 1;
+        public const int MaxLevel = 10;
+
+        public static bool ValidLevel(int level) => level >= MinLevel && level <= MaxLevel;
 
         public static List<int> Buy(StorySave save, StoryRules rules, int packIndex,
             IReadOnlyList<int> pool, Func<int, int> randomIndex)
@@ -114,11 +149,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             return draws;
         }
 
-        public static bool Settle(StorySave save, StoryRules rules, string duelId, string character, bool won)
+        public static bool Settle(StorySave save, StoryRules rules, string duelId, string character, int level, bool won)
         {
+            if (!ValidLevel(level)) throw new ArgumentOutOfRangeException(nameof(level));
             if (string.IsNullOrEmpty(duelId) || duelId == save.lastSettledDuel) return false;
             int total = checked(save.completedDuels + 1);
-            int dp = won ? checked(save.dp + rules.winDP) : save.dp;
+            int dp = won ? checked(save.dp + rules.WinReward(level)) : save.dp;
             int wins = won ? checked(save.wins + 1) : save.wins;
             int characterWins = won ? checked((save.characterWins.TryGetValue(character, out int n) ? n : 0) + 1) : 0;
             save.completedDuels = total;
@@ -169,24 +205,68 @@ namespace MDPro3.Plugins.Features.StoryMode
                 Commit(StorySave.New(starter()));
                 return;
             }
-            try { Current = Read(SavePath); }
+            bool migrated;
+            try { Current = Read(SavePath, out migrated); }
             catch (Exception primary)
             {
-                try { Current = Read(SavePath + ".bak"); }
+                try { Current = Read(SavePath + ".bak", out migrated); }
                 catch { throw new InvalidDataException("存档及备份无法读取，已保留原文件，请先修复存档。", primary); }
                 LoadNotice = "主存档无法读取，已加载上一次备份。";
                 // Preserve the unreadable primary and restore a valid primary before the next transaction.
                 if (File.Exists(SavePath)) File.Copy(SavePath, SavePath + ".damaged-" + DateTime.UtcNow.Ticks);
                 File.Copy(SavePath + ".bak", SavePath, true);
             }
+            if (migrated)
+            {
+                Commit(Current.Copy());
+                LoadNotice = string.IsNullOrEmpty(LoadNotice)
+                    ? "旧故事存档已迁移：原角色卡组保留为 1 级卡组。"
+                    : LoadNotice + " 旧角色卡组已迁移为 1 级卡组。";
+            }
         }
 
-        private static StorySave Read(string path)
+        private static StorySave Read(string path, out bool migrated)
         {
-            var value = JsonConvert.DeserializeObject<StorySave>(File.ReadAllText(path));
+            var document = JObject.Parse(File.ReadAllText(path));
+            int version = document.Value<int?>("version") ?? 0;
+            migrated = version == 1;
+            StorySave value = migrated ? Upgrade(document.ToObject<StorySaveV1>())
+                : version == StorySave.CurrentVersion ? document.ToObject<StorySave>() : null;
             if (value == null) throw new InvalidDataException("存档为空。");
             value.Validate();
             return value;
+        }
+
+        private static StorySave Upgrade(StorySaveV1 legacy)
+        {
+            if (legacy == null) return null;
+            var value = new StorySave
+            {
+                dp = legacy.dp,
+                completedDuels = legacy.completedDuels,
+                wins = legacy.wins,
+                lastSettledDuel = legacy.lastSettledDuel,
+                owned = legacy.owned,
+                player = legacy.player,
+                characterWins = legacy.characterWins
+            };
+            if (legacy.opponents != null)
+                foreach (var opponent in legacy.opponents)
+                    value.SetOpponent(opponent.Key, 1, opponent.Value);
+            return value;
+        }
+
+        [Serializable]
+        private sealed class StorySaveV1
+        {
+            public int dp = 0;
+            public int completedDuels = 0;
+            public int wins = 0;
+            public string lastSettledDuel = "";
+            public Dictionary<int, int> owned = new Dictionary<int, int>();
+            public StoryDeck player = new StoryDeck();
+            public Dictionary<string, StoryDeck> opponents = new Dictionary<string, StoryDeck>();
+            public Dictionary<string, int> characterWins = new Dictionary<string, int>();
         }
 
         public void Commit(StorySave next)

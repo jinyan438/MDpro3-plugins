@@ -31,6 +31,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private StoryDuelPackets duel;
         private string duelId;
         private string opponentId;
+        private int opponentLevel;
         private string port;
         private TcpClient connection;
         private bool deckSent, startSent, enteredDuel, settled;
@@ -45,7 +46,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal bool Launching => duel != null && !enteredDuel;
         internal bool SuppressRoomChat => duel != null;
         internal string SelectedCharacter;
-        internal int SelectedSeries, SelectedPage;
+        internal int SelectedSeries, SelectedPage, SelectedLevel = StoryProgress.MinLevel;
 
         public override void Enable()
         {
@@ -95,10 +96,11 @@ namespace MDPro3.Plugins.Features.StoryMode
                 try
                 {
                     var next = Store.Current.Copy();
-                    StoryProgress.Settle(next, Rules, duelId, opponentId, duel.Won);
+                    StoryProgress.Settle(next, Rules, duelId, opponentId, opponentLevel, duel.Won);
                     Store.Commit(next);
                     settled = true;
-                    Notice = duel.Won ? "挑战胜利！获得 " + Rules.winDP + " DP。" : "挑战结束，已计入卡包解锁进度。";
+                    Notice = duel.Won ? opponentLevel + "级挑战胜利！获得 " + Rules.WinReward(opponentLevel) + " DP。"
+                        : opponentLevel + "级挑战结束，已计入卡包解锁进度。";
                     MessageManager.Cast(Notice);
                 }
                 catch (Exception ex)
@@ -208,12 +210,14 @@ namespace MDPro3.Plugins.Features.StoryMode
             shop = PackBrowserOverlay.OpenShop(this, () => { shop = null; Show(); });
         }
 
-        internal void EditDeck(string character)
+        internal void EditDeck(string character, int level = 0)
         {
             if (duel != null || editor != null || !(PluginGame.CurrentServant is MainMenu)) return;
+            if (character != null && !StoryProgress.ValidLevel(level))
+            { MessageManager.Cast("角色卡组难度必须为 1–10 级。"); return; }
             try
             {
-                editor = new StoryDeckEditor(this, character);
+                editor = new StoryDeckEditor(this, character, level);
                 if (overlay != null) overlay.Close();
                 editor.Open();
             }
@@ -230,26 +234,30 @@ namespace MDPro3.Plugins.Features.StoryMode
             reopen = true; menuPending = true;
         }
 
-        internal bool SaveDeck(string character, StoryDeck deck)
+        internal bool SaveDeck(string character, int level, StoryDeck deck)
         {
+            if (character != null && !StoryProgress.ValidLevel(level))
+            { MessageManager.Cast("角色卡组难度必须为 1–10 级。"); return false; }
             string invalid = StoryCatalog.Validate(deck, character == null ? Store.Current : null);
             if (invalid != null) { MessageManager.Cast(invalid); return false; }
             try
             {
                 var next = Store.Current.Copy();
-                if (character == null) next.player = deck.Copy(); else next.opponents[character] = deck.Copy();
+                if (character == null) next.player = deck.Copy(); else next.SetOpponent(character, level, deck);
                 Store.Commit(next);
-                Notice = character == null ? "玩家卡组已保存。" : "角色卡组已保存。";
+                Notice = character == null ? "玩家卡组已保存。" : CharacterSelector.characters.GetName(character)
+                    + "的 " + level + "级卡组已保存。";
                 return true;
             }
             catch (Exception ex) { MessageManager.Cast("保存失败：" + ex.Message); return false; }
         }
 
-        internal void Challenge(string character)
+        internal void Challenge(string character, int level)
         {
             if (duel != null) return;
-            if (!Store.Current.opponents.TryGetValue(character, out var opponent))
-            { MessageManager.Cast("请先编辑并保存这个角色的卡组。"); return; }
+            if (!StoryProgress.ValidLevel(level)) { MessageManager.Cast("挑战难度必须为 1–10 级。"); return; }
+            if (!Store.Current.TryGetOpponent(character, level, out var opponent))
+            { MessageManager.Cast("请先编辑并保存这个角色的 " + level + "级卡组。"); return; }
             string invalid = StoryCatalog.Validate(Store.Current.player, Store.Current) ?? StoryCatalog.Validate(opponent);
             if (invalid != null) { MessageManager.Cast(invalid); return; }
             if (!StoryDuelObserver.Available) { MessageManager.Cast("当前本体无法读取决斗结算，故事挑战不可用。"); return; }
@@ -277,7 +285,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 string[] args = { "Name=" + name, "Deck=MDPro3Story", "DeckFile=" + path,
                     "Dialog=" + Path.GetFullPath(dialog), "Host=127.0.0.1", "Port=" + number, "Chat=false" };
                 duel = new StoryDuelPackets();
-                duelId = Guid.NewGuid().ToString("N"); opponentId = character; port = number.ToString();
+                duelId = Guid.NewGuid().ToString("N"); opponentId = character; opponentLevel = level; port = number.ToString();
                 connection = null; deckSent = startSent = enteredDuel = settled = settlementErrorShown = false; error = null;
                 launchTime = Time.unscaledTime; nextSaveAttempt = 0;
                 savedCharacter = Config.Get("DuelCharacter1", "0001");
@@ -294,7 +302,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 if (!TcpHelper.LinkStart("127.0.0.1", Config.Get("DuelPlayerName0", "Player"), port, "", true,
                     () => new System.Threading.Thread(() => WindBot.Program.Main(args)) { IsBackground = true }.Start()))
                     throw new InvalidOperationException("本地连接未能启动。");
-                overlay.ShowConnecting(name);
+                overlay.ShowConnecting(name, level);
             }
             catch (Exception ex) { CancelChallenge("挑战启动失败：" + ex.Message); }
         }
@@ -333,7 +341,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (ownsServer && YgoServer.ServerRunning()) YgoServer.StopServer();
             ownsServer = false;
             RestoreAppearance();
-            duel = null; connection = null;
+            duel = null; connection = null; opponentLevel = 0;
             if (overlay != null) overlay.Close();
             reopen = true; menuPending = true;
             if (PluginGame.CurrentServant != Program.instance.menu) Program.instance.ShiftToServant(Program.instance.menu);
