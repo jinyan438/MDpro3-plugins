@@ -1,0 +1,11 @@
+<linker>
+  <!--
+    Unity's managed linker sees the data contract configuration types only through
+    Mono's machine.config and otherwise removes them. WindBot uses
+    DataContractJsonSerializer for its dialog file, so keep this reflection-only
+    configuration surface in player builds.
+  -->
+  <assembly fullname="System.Runtime.Serialization">
+    <namespace fullname="System.Runtime.Serialization.Configuration" preserve="all" />
+  </assembly>
+</linker>

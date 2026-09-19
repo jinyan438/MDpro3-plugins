@@ -10,6 +10,11 @@
       "id": "packBrowser",
       "enabled": true,
       "note": "主界面：卡包浏览（铺开所有卡包，封面用封面卡，点开查看收录卡片）"
+    },
+    {
+      "id": "rpsVisualFix",
+      "enabled": true,
+      "note": "决斗开始：修复猜拳选项图片，并显示双方的猜拳结果图片"
     }
   ],
   "logFeatureTicks": false,

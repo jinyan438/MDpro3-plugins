@@ -14,6 +14,7 @@ plugins/
 ├─ README.md                     本说明
 ├─ config.json                   ★ 单功能开关（改了不用重建，重启游戏即可）
 ├─ MDPro3Plugins/                插件源码（唯一真源，只改这里）
+│  ├─ link.xml                   保留 WindBot JSON 反序列化依赖的运行时类型
 │  ├─ Runtime/
 │  │  ├─ PluginInfo.cs           插件标识 / 版本
 │  │  ├─ PluginLog.cs            统一日志前缀 [MDPro3Plugins]
@@ -30,15 +31,19 @@ plugins/
 │  │  │  │  ├─ SearchOrderRowInjector.cs   把新条目注入排序弹窗
 │  │  │  │  ├─ CardReleaseDate.cs          取卡包首发日期
 │  │  │  │  └─ ReleaseDateSortLabels.cs    多语言标签
-│  │  │  └─ PackBrowser/         主界面卡包浏览
-│  │  │     ├─ PackBrowserFeature.cs       功能本体 + 主界面「卡包」按钮注入
-│  │  │     ├─ PackBrowserOverlay.cs       全屏卡包界面（网格 + 卡表 + 输入）
-│  │  │     ├─ PackTileItem.cs             格子行为（基于游戏自带卡组格子）
-│  │  │     ├─ PackWrapperVisual.cs        长条金色包装 + 封面原画 + 选中光框
-│  │  │     ├─ PackCatalog.cs              从游戏数据组装卡包与封面
-│  │  │     ├─ PackCategory.cs             卡包商品分类规则
-│  │  │     ├─ PackCoverTable.g.cs         生成的封面表（904 个卡包）
-│  │  │     └─ PackBrowserLabels.cs        多语言标签
+│  │  │  ├─ PackBrowser/         主界面卡包浏览
+│  │  │  │  ├─ PackBrowserFeature.cs       功能本体 + 主界面「卡包」按钮注入
+│  │  │  │  ├─ PackBrowserOverlay.cs       全屏卡包界面（网格 + 卡表 + 输入）
+│  │  │  │  ├─ PackTileItem.cs             格子行为（基于游戏自带卡组格子）
+│  │  │  │  ├─ PackWrapperVisual.cs        长条金色包装 + 封面原画 + 选中光框
+│  │  │  │  ├─ PackCatalog.cs              从游戏数据组装卡包与封面
+│  │  │  │  ├─ PackCategory.cs             卡包商品分类规则
+│  │  │  │  ├─ PackCoverTable.g.cs         生成的封面表（904 个卡包）
+│  │  │  │  └─ PackBrowserLabels.cs        多语言标签
+│  │  │  └─ RpsVisualFix/        猜拳图片缺失时提供内置图标
+│  │  │     ├─ RpsVisualFixFeature.cs       弹窗修复 + 运行时图标生成
+│  │  │     ├─ RpsResultPacketObserver.cs   只读捕获双方猜拳结果
+│  │  │     └─ RpsResultOverlay.cs          双方结果图片展示层
 │  │  └─ Diagnostics/
 │  │     └─ PluginSelfTest.cs    游戏内自检（--diagnose 使用，不属于功能）
 │  ├─ Editor/
@@ -162,13 +167,25 @@ plugins\config.json     ──游戏启动时读取（随时改，不用重建�
 
 ---
 
+### 决斗开始：猜拳图标缺失修复
+
+- 原弹窗从运行目录下的 `Picture\DIY\Rock.png`、`Paper.png`、`Scissors.png` 读取三个选项；这些文件缺失时，
+  原版按钮仍可点击，但图片保持完全透明。
+- 插件在猜拳弹窗出现时检查三个按钮；仍不可见的按钮会使用插件运行时生成的石头、布、剪刀图标，
+  不依赖发布包外部文件。若原版 PNG 存在且成功加载，原版图片仍会正常覆盖兜底图标。
+- 服务器返回结果后，插件会短暂显示我方与对方各自出的手势图片，并明确标出胜利、落败或平局；
+  手动选择和“自动猜拳”都使用服务器的真实结果，不靠本地推断。
+
+---
+
 ## 3. config.json：单功能开关
 
 ```json
 {
   "features": [
     { "id": "releaseDateSort", "enabled": true, "note": "按卡片发布时间排序" },
-    { "id": "packBrowser", "enabled": true, "note": "主界面卡包浏览" }
+    { "id": "packBrowser", "enabled": true, "note": "主界面卡包浏览" },
+    { "id": "rpsVisualFix", "enabled": true, "note": "修复猜拳选项并显示双方结果图片" }
   ],
   "logFeatureTicks": false,
   "logEvents": false
@@ -296,6 +313,8 @@ Run_MDPro3.bat --diagnose
 会启动构建好的游戏（`-mdpro3-plugin-selftest`）跑一遍自检再自动退出，检查：
 
 - 插件是否被编译进玩家、版本号、`config.json` 实际读取路径；
+- WindBot 读取对话 JSON 所需的 `System.Runtime.Serialization.Configuration` 类型和构造函数是否未被 Unity 裁剪；
+- 猜拳结果包解析、胜负映射以及运行时只读观察器是否正常；
 - **注册表与开关**：每个功能 id、状态（on/off）、是否正在运行；
 - 真实卡库数据：卡数、有日期的卡数、最早 / 最新的卡与日期；
 - 升序 / 降序是否有序，含“无日期卡放最后”；

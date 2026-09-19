@@ -31,6 +31,7 @@ namespace MDPro3.Plugins
         {
             yield return new Features.ReleaseDateSort.ReleaseDateSortFeature();
             yield return new Features.PackBrowser.PackBrowserFeature();
+            yield return new Features.RpsVisualFix.RpsVisualFixFeature();
         }
 
         /// <summary>

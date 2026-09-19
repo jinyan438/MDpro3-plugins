@@ -1,6 +1,7 @@
 using MDPro3.Duel.YGOSharp;
 using MDPro3.Plugins.Features.PackBrowser;
 using MDPro3.Plugins.Features.ReleaseDateSort;
+using MDPro3.Plugins.Features.RpsVisualFix;
 using MDPro3.Servant;
 using MDPro3.UI;
 using System;
@@ -237,6 +238,9 @@ namespace MDPro3.Plugins.Diagnostics
                 ? PluginConfig.LoadedPath
                 : PluginInfo.ConfigFolderName + "\\" + PluginInfo.ConfigFileName + " not found, defaults are used"));
 
+            CheckWindBotSerializationRuntime();
+            CheckRpsResultRuntime();
+
             foreach (var entry in PluginRegistry.Features)
                 notes.Add("feature " + entry.Id + " = "
                     + PluginConfig.DescribeFeature(entry.Id)
@@ -251,6 +255,74 @@ namespace MDPro3.Plugins.Diagnostics
             }
 
             notes.Add("release date sort is running, checks follow");
+        }
+
+        private static void CheckWindBotSerializationRuntime()
+        {
+            const string assemblyName = "System.Runtime.Serialization";
+            const string groupName = "System.Runtime.Serialization.Configuration.SerializationSectionGroup";
+            const string sectionName = "System.Runtime.Serialization.Configuration.DataContractSerializerSection";
+
+            var groupType = Type.GetType(groupName + ", " + assemblyName, false);
+            var sectionType = Type.GetType(sectionName + ", " + assemblyName, false);
+            if (groupType == null)
+            {
+                Fail("WindBot cannot start: Unity stripped " + groupName);
+                return;
+            }
+            if (sectionType == null)
+            {
+                Fail("WindBot cannot start: Unity stripped " + sectionName);
+                return;
+            }
+            if (groupType.GetConstructor(Type.EmptyTypes) == null
+                || sectionType.GetConstructor(Type.EmptyTypes) == null)
+            {
+                Fail("WindBot cannot start: Unity stripped a data contract configuration constructor");
+                return;
+            }
+
+            notes.Add("WindBot serialization runtime: available");
+        }
+
+        private static void CheckRpsResultRuntime()
+        {
+            var resultPacket = new byte[] { 0x05, 2, 1 };
+            if (!RpsResultPacketObserver.TryDecode(resultPacket, out int myHand, out int opponentHand)
+                || myHand != 2 || opponentHand != 1)
+            {
+                Fail("the rock-paper-scissors result packet decoder rejected a valid packet");
+            }
+            if (RpsResultPacketObserver.TryDecode(new byte[] { 0x04, 2, 1 }, out _, out _)
+                || RpsResultPacketObserver.TryDecode(new byte[] { 0x05, 2 }, out _, out _)
+                || RpsResultPacketObserver.TryDecode(new byte[] { 0x05, 0, 1 }, out _, out _))
+            {
+                Fail("the rock-paper-scissors result packet decoder accepted an invalid packet");
+            }
+
+            if (RpsResultOverlay.GetOutcome(1, 3) != RpsResultOverlay.Outcome.Win
+                || RpsResultOverlay.GetOutcome(2, 1) != RpsResultOverlay.Outcome.Win
+                || RpsResultOverlay.GetOutcome(3, 2) != RpsResultOverlay.Outcome.Win
+                || RpsResultOverlay.GetOutcome(1, 2) != RpsResultOverlay.Outcome.Lose
+                || RpsResultOverlay.GetOutcome(2, 3) != RpsResultOverlay.Outcome.Lose
+                || RpsResultOverlay.GetOutcome(3, 1) != RpsResultOverlay.Outcome.Lose
+                || RpsResultOverlay.GetOutcome(1, 1) != RpsResultOverlay.Outcome.Draw)
+            {
+                Fail("the rock-paper-scissors win/loss mapping is incorrect");
+            }
+
+            if (PluginRegistry.IsRunning(RpsVisualFixFeature.FeatureId))
+            {
+                var observer = Program.instance.GetComponent<RpsResultPacketObserver>();
+                if (observer == null)
+                    Fail("the rock-paper-scissors result packet observer is not attached");
+                else
+                    notes.Add("rock-paper-scissors result packet decoder and observer: available");
+            }
+            else
+            {
+                notes.Add("the rock-paper-scissors visual feature is not running; live observer check skipped");
+            }
         }
 
         #endregion
