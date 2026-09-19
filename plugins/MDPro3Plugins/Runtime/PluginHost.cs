@@ -95,6 +95,7 @@ namespace MDPro3.Plugins
         private void PluginSelfTestTick()
         {
             Diagnostics.PluginSelfTest.Tick();
+            Diagnostics.StoryModeSelfTest.Tick();
         }
 
         #region Feature ticks

@@ -3,6 +3,7 @@ using MDPro3.Servant;
 using MDPro3.UI;
 using MDPro3.UI.PropertyOverride;
 using MDPro3.Utility;
+using MDPro3.Plugins.Features.StoryMode;
 using System;
 using System.Collections.Generic;
 using TMPro;
@@ -65,6 +66,46 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private RectTransform categoryBar;
         private RectTransform gridArea;
         private Button backButton;
+        private StoryModeFeature story;
+        private Button purchaseButton;
+        private TextMeshProUGUI purchaseText;
+        private Action onClosed;
+
+        internal static PackBrowserOverlay OpenShop(StoryModeFeature feature, Action closed)
+        {
+            var browser = Open();
+            if (browser == null) return null;
+            browser.story = feature;
+            var titleOffset = browser.titleText.rectTransform.offsetMin;
+            titleOffset.x = 120f;
+            browser.titleText.rectTransform.offsetMin = titleOffset;
+            browser.onClosed = closed;
+            browser.purchaseButton = StoryUI.Button(browser.transform, "购买并拆包", .60f, .918f, .25f, .055f,
+                browser.Purchase, true);
+            browser.purchaseText = browser.purchaseButton.GetComponentInChildren<TextMeshProUGUI>();
+            var counts = new int[PackCategories.Count];
+            foreach (var pack in feature.Packs) counts[(int)pack.Category]++;
+            counts[0] = feature.Packs.Count;
+            for (int i = 0; i < browser.categoryToggles.Length; i++)
+                browser.categoryToggles[i].GetComponentInChildren<TextMeshProUGUI>().text =
+                    PackBrowserLabels.Category((PackCategory)i) + " (" + counts[i] + ")";
+            browser.ShowPacks();
+            return browser;
+        }
+
+        private void Purchase()
+        {
+            if (story == null || current == null) return;
+            try
+            {
+                var drawn = story.Buy(current);
+                var result = new PackEntry { FullName = "StoryOpeningResult", Name = "开包结果 · 已获得 3 张卡", IsPrerelease = true };
+                result.Cards.AddRange(drawn);
+                ShowCards(result);
+                AudioManager.PlaySE("SE_MENU_DECIDE");
+            }
+            catch (Exception ex) { MessageManager.Cast(ex.Message); }
+        }
 
         internal PackCategory SelectedCategory => category;
 
@@ -164,6 +205,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
             if (tileHandle.IsValid())
             {
+                tileHandle.Completed -= OnTilesLoaded;
                 Addressables.ReleaseInstance(tileHandle);
                 tileHandle = default;
             }
@@ -524,7 +566,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
             current = null;
             focused = -1;
             packs.Clear();
-            foreach (var entry in PackCatalog.All)
+            foreach (var entry in story != null ? story.Packs : PackCatalog.All)
                 if (category == PackCategory.All || entry.Category == category)
                     packs.Add(entry);
             Print();
@@ -617,7 +659,9 @@ namespace MDPro3.Plugins.Features.PackBrowser
                     return;
 
                 var entry = packs[index];
-                tile.Show(index, Caption(entry), entry.CoverCard, PackTileContent.Art);
+                string caption = Caption(entry);
+                if (story != null && !story.Unlocked(entry)) caption = "[未解锁] " + caption;
+                tile.Show(index, caption, entry.CoverCard, PackTileContent.Art);
             }
             else
             {
@@ -647,6 +691,25 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private void UpdateHeader()
         {
+            if (story != null)
+            {
+                titleText.text = (mode == BrowserMode.Packs ? "故事卡包商店" : current?.Name)
+                    + "  ·  " + story.Store.Current.dp + " DP";
+                bool purchasablePack = mode == BrowserMode.Cards && current != null && story.PackIndex(current) >= 0;
+                purchaseButton.gameObject.SetActive(purchasablePack);
+                if (purchasablePack)
+                {
+                    purchaseButton.interactable = story.Unlocked(current) && story.Store.Current.dp >= story.Rules.packPrice;
+                    purchaseText.text = !story.Unlocked(current) ? "尚未解锁"
+                        : story.Store.Current.dp < story.Rules.packPrice ? "DP 不足（需要 " + story.Rules.packPrice + "）"
+                        : "购买并拆包  ·  " + story.Rules.packPrice + " DP";
+                }
+                infoText.text = mode == BrowserMode.Packs
+                    ? "按发售时间从早到晚解锁 · 已完成 " + story.Store.Current.completedDuels + " 场挑战 · 每包固定 3 张"
+                    : purchasablePack ? current.DateText + " · " + current.Count + " 种卡 · " + story.PackStatus(current)
+                    : "这 3 张卡已保存到玩家卡池（重复卡分别计数）。点击卡图查看详情，返回可继续购买。";
+                return;
+            }
             if (titleText != null)
                 titleText.text = mode == BrowserMode.Packs
                     ? PackBrowserLabels.Title
@@ -683,6 +746,11 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 return;
 
             var entry = packs[focused];
+            if (story != null)
+            {
+                infoText.text = entry.Name + " · " + entry.DateText + " · " + story.PackStatus(entry);
+                return;
+            }
             infoText.text = entry.Name
                 + (entry.IsPrerelease ? string.Empty : "  \u00b7  " + entry.DateText)
                 + "  \u00b7  " + entry.Count + " " + PackBrowserLabels.Cards
@@ -789,6 +857,9 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 UIManager.InputBlocker = null;
 
             Destroy(gameObject);
+            var callback = onClosed;
+            onClosed = null;
+            callback?.Invoke();
         }
 
         #endregion

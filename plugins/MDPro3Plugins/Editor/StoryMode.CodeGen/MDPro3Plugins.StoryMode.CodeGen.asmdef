@@ -1,0 +1,8 @@
+{
+    "name": "Unity.MDPro3Plugins.StoryMode.CodeGen",
+    "references": [],
+    "includePlatforms": ["Editor"],
+    "overrideReferences": true,
+    "precompiledReferences": ["Mono.Cecil.dll"],
+    "autoReferenced": false
+}

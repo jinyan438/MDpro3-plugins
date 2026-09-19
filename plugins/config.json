@@ -15,6 +15,11 @@
       "id": "rpsVisualFix",
       "enabled": true,
       "note": "决斗开始：修复猜拳选项图片，并显示双方的猜拳结果图片"
+    },
+    {
+      "id": "storyMode",
+      "enabled": true,
+      "note": "主界面：故事模式，角色挑战、独立卡池、DP 和按年代解锁卡包"
     }
   ],
   "logFeatureTicks": false,

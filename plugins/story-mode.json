@@ -1,0 +1,7 @@
+{
+  "initialPacks": 5,
+  "duelsPerUnlock": 3,
+  "packsPerUnlock": 1,
+  "winDP": 100,
+  "packPrice": 100
+}

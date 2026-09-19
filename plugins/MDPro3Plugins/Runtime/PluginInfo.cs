@@ -10,7 +10,7 @@ namespace MDPro3.Plugins
     public static class PluginInfo
     {
         public const string Name = "MDPro3Plugins";
-        public const string Version = "0.4.5";
+        public const string Version = "0.5.0";
 
         /// <summary>Folder (next to this plugin) that holds the configuration file.</summary>
         public const string ConfigFolderName = "plugins";

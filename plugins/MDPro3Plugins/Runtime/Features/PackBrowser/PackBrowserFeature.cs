@@ -165,7 +165,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private static bool reportedTemplateProblem;
 
-        public static bool Inject(MainMenu menu, Action onOpen)
+        public static bool Inject(MainMenu menu, Action onOpen, string objectName = ObjectName, string label = null)
         {
             if (menu == null)
                 return false;
@@ -185,11 +185,11 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 return false;
             }
 
-            if (parent.Find(ObjectName) != null)
-                return false;
+            if (parent.Find(objectName) != null)
+                return true;
 
             var clone = UnityEngine.Object.Instantiate(template.gameObject, parent, false);
-            clone.name = ObjectName;
+            clone.name = objectName;
 
             var button = clone.GetComponent<SelectionButton_MainMenu>();
             if (button == null)
@@ -199,7 +199,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 return false;
             }
 
-            SetLabel(button, PackBrowserLabels.MenuEntry);
+            SetLabel(button, label ?? PackBrowserLabels.MenuEntry);
             button.SetClickEvent(() => onOpen());
             DisableClonedActions(button.GetSelectable() as Button);
 

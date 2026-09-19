@@ -8,4 +8,15 @@
   <assembly fullname="System.Runtime.Serialization">
     <namespace fullname="System.Runtime.Serialization.Configuration" preserve="all" />
   </assembly>
+  <assembly fullname="Assembly-CSharp">
+    <!-- JSON save fields and WindBot's executor discovery are accessed through reflection. -->
+    <type fullname="MDPro3.Plugins.Features.StoryMode.StorySave" preserve="all" />
+    <type fullname="MDPro3.Plugins.Features.StoryMode.StoryDeck" preserve="all" />
+    <type fullname="MDPro3.Plugins.Features.StoryMode.StoryRules" preserve="all" />
+    <type fullname="MDPro3.Plugins.Features.StoryMode.StoryExecutor" preserve="all" />
+    <!-- Invoked from the editor's story submenu through reflection. -->
+    <type fullname="MDPro3.UI.ServantUI.DeckEditorUI">
+      <method name="OnHandTestSettings" />
+    </type>
+  </assembly>
 </linker>
