@@ -3,5 +3,6 @@
   "duelsPerUnlock": 3,
   "packsPerUnlock": 1,
   "winDP": 100,
-  "packPrice": 100
+  "packPrice": 100,
+  "rarityWeights": [550, 325, 75, 25, 15, 10]
 }

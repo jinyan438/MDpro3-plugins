@@ -36,6 +36,18 @@ internal static class StoryEditorWeaverTests
                 .Count(i => i.OpCode == OpCodes.Call && i.Operand is MethodReference r
                     && r.DeclaringType.Name == "StoryDeckEditorHooks");
             Check(calls >= 15, "all native guards inserted");
+            foreach (string hook in new[] { "StampCard", "ExportRarities", "ChangeRarity", "StyleCard", "SearchRarity", "FindVersion", "ConfigureRarityFilter", "MatchesRarity" })
+                Check(patched.MainModule.Types.SelectMany(t => t.Methods).Where(m => m.HasBody).Any(m =>
+                    m.Body.Instructions.Any(i => i.OpCode == OpCodes.Call && i.Operand is MethodReference r
+                        && r.DeclaringType.Name == "StoryDeckEditorHooks" && r.Name == hook)), "rarity hook inserted: " + hook);
+            var sortCalls = patched.MainModule.GetType("MDPro3.Duel.YGOSharp.CardsManager").NestedTypes
+                .SelectMany(t => t.Methods).Where(m => m.HasBody).SelectMany(m => m.Body.Instructions);
+            Check(sortCalls.Any(i => i.Operand is MethodReference r && r.Name == "SortRarity"),
+                "native comparison lambdas use story rarity order");
+            var material = patched.MainModule.GetType("MDPro3.MaterialLoader").Methods.Single(m => m.Name == "GetCardMaterial");
+            Check(material.Body.Instructions.Any(i => i.Operand is MethodReference r && r.Name == "ResolveMaterialRarity")
+                && !material.Body.Instructions.Any(i => i.Operand is MethodReference r && r.Name == "GetRarity"),
+                "native finish material uses the scoped per-copy override");
             var roomShow = patched.MainModule.GetType("MDPro3.Servant.RoomServant").Methods
                 .Single(m => m.Name == "ApplyShowArrangement" && m.Parameters.Count == 1);
             Check(roomShow.Body.Instructions.Count(i => i.OpCode == OpCodes.Call && i.Operand is MethodReference r

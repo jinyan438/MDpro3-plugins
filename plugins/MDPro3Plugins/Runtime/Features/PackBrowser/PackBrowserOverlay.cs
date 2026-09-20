@@ -70,6 +70,8 @@ namespace MDPro3.Plugins.Features.PackBrowser
         private Button purchaseButton;
         private TextMeshProUGUI purchaseText;
         private Action onClosed;
+        private StoryPackOpening opening;
+        private bool purchasing;
 
         internal static PackBrowserOverlay OpenShop(StoryModeFeature feature, Action closed)
         {
@@ -95,16 +97,34 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         private void Purchase()
         {
-            if (story == null || current == null) return;
+            if (story == null || current == null || closing || purchasing || opening != null) return;
+            purchasing = true;
+            var purchasedPack = current;
+            List<StoryCard> drawn = null;
             try
             {
-                var drawn = story.Buy(current);
-                var result = new PackEntry { FullName = "StoryOpeningResult", Name = "开包结果 · 已获得 3 张卡", IsPrerelease = true };
-                result.Cards.AddRange(drawn);
-                ShowCards(result);
-                AudioManager.PlaySE("SE_MENU_DECIDE");
+                var owned = story.Store.Current;
+                drawn = story.Buy(purchasedPack);
+                UpdateHeader();
+                opening = StoryPackOpening.Open(transform, purchasedPack, drawn, owned, packs.IndexOf(purchasedPack), () =>
+                {
+                    opening = null;
+                    if (!closing) ShowCards(purchasedPack);
+                });
             }
-            catch (Exception ex) { MessageManager.Cast(ex.Message); }
+            catch (Exception ex)
+            {
+                // A presentation failure must still show the committed purchase, never buy again.
+                if (drawn != null)
+                {
+                    var result = new PackEntry { FullName = "StoryOpeningResult", Name = "开包结果 · 已获得 3 张卡", IsPrerelease = true };
+                    foreach (var card in drawn) result.Cards.Add(card.id);
+                    ShowCards(result);
+                    PluginLog.Error("story opening: " + ex);
+                }
+                else MessageManager.Cast(ex.Message);
+            }
+            finally { purchasing = false; }
         }
 
         internal PackCategory SelectedCategory => category;
@@ -562,6 +582,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
         /// <summary>Shows the pack wall.</summary>
         public void ShowPacks()
         {
+            if (opening != null) return;
             mode = BrowserMode.Packs;
             current = null;
             focused = -1;
@@ -574,6 +595,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
 
         internal void SelectCategory(PackCategory value)
         {
+            if (opening != null) return;
             if ((int)value < 0 || (int)value >= PackCategories.Count)
                 return;
 
@@ -587,7 +609,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
         /// <summary>Shows the cards of one pack.</summary>
         internal void ShowCards(PackEntry entry)
         {
-            if (entry == null)
+            if (entry == null || opening != null)
                 return;
 
             mode = BrowserMode.Cards;
@@ -760,7 +782,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
         /// <summary>Called by a tile when it is clicked or confirmed.</summary>
         public void OnTileSubmit(PackTileItem tile)
         {
-            if (tile == null)
+            if (tile == null || opening != null)
                 return;
 
             int index = tile.EntryIndex;
@@ -840,6 +862,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
         /// <summary>Esc: from the card list back to the pack wall, from the wall it closes.</summary>
         public void Back()
         {
+            if (opening != null) { opening.Skip(); return; }
             if (mode == BrowserMode.Cards)
                 ShowPacks();
             else
@@ -852,6 +875,7 @@ namespace MDPro3.Plugins.Features.PackBrowser
                 return;
 
             closing = true;
+            if (opening != null) { opening.Abort(); opening = null; }
 
             if (ReferenceEquals(UIManager.InputBlocker, this))
                 UIManager.InputBlocker = null;

@@ -13,6 +13,7 @@ namespace MDPro3.Plugins.Features.StoryMode
     {
         internal static readonly Color Panel = new Color(0.065f, 0.14f, 0.20f, 1f);
         internal static readonly Color Accent = new Color(0.75f, 0.93f, 0.08f, 1f);
+        internal static readonly Color Configured = new Color(0.08f, 0.32f, 0.24f, 1f);
         internal static TMP_FontAsset Font => Language.GetConfig() == Language.SimplifiedChinese
             ? PluginGame.UI.cnMenuTmpFont ?? PluginGame.UI.tmpFont : PluginGame.UI.tmpFont;
 

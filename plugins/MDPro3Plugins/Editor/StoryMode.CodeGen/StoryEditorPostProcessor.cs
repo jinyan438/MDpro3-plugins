@@ -69,6 +69,36 @@ namespace MDPro3.Plugins.CodeGen
             Override(Method(view, "CanAddCard", 2), Method(hooks, "UsesView", 1), Method(hooks, "CanAdd", 3));
             Override(Method(view, "Save", 0), Method(hooks, "UsesView", 1), Method(hooks, "SaveView", 1));
             Override(Method(editor, "get_Banlist", 0), Method(hooks, "Active", 0), Method(hooks, "GetBanlist", 0));
+            Override(Method(view, "GetCardByData", 1), Method(hooks, "UsesPlayerView", 1), Method(hooks, "FindVersion", 2));
+            WrapReturn(Method(view, "AddCard", 4), Method(hooks, "StampCard", 2));
+            var addCopy = Method(view, "AddCard", 4);
+            Prepend(addCopy, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1),
+                Instruction.Create(OpCodes.Call, Method(hooks, "PrepareCard", 2)), Instruction.Create(OpCodes.Starg, addCopy.Parameters[0]) });
+            WrapReturn(Method(view, "FromObjectDeckToCodedDeck", 0), Method(hooks, "ExportRarities", 2));
+            Prepend(Method(module.GetType("MDPro3.UI.SelectionButton_CardInDeck"), "ShowThisCard", 0),
+                new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, Method(hooks, "SelectDeckVersion", 1)) });
+            AfterVoid(Method(module.GetType("MDPro3.UI.UIWidgetCardBase"), "SetCardData", 1), Method(hooks, "ConfigureCardWidget", 1));
+            Prepend(Method(module.GetType("MDPro3.UI.UIWidgetCardBase"), "SetCardData", 1),
+                new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1), Instruction.Create(OpCodes.Call, Method(hooks, "SelectWidgetVersion", 2)) });
+            var setCard = module.GetType("MDPro3.UI.CardRawImageHandler").Methods.Single(m => m.Name == "SetCard"
+                && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.FullName == "MDPro3.Duel.YGOSharp.Card");
+            AfterVoid(setCard, Method(hooks, "StyleCard", 1));
+            var material = Method(module.GetType("MDPro3.MaterialLoader"), "GetCardMaterial", 2);
+            var rarityCalls = material.Body.Instructions.Where(i => i.Operand is MethodReference m
+                && m.DeclaringType.FullName == "MDPro3.CardRarity" && m.Name == "GetRarity").ToArray();
+            if (rarityCalls.Length != 1) throw new InvalidOperationException("Unsupported card material rarity lookup.");
+            rarityCalls[0].Operand = Method(module.GetType("MDPro3.Plugins.Features.StoryMode.StoryCardFinish"), "ResolveMaterialRarity", 1);
+            var cardsManager = module.GetType("MDPro3.Duel.YGOSharp.CardsManager");
+            foreach (var method in AllMethods(cardsManager).Where(m => m.HasBody))
+                foreach (var call in method.Body.Instructions.Where(i => i.Operand is MethodReference m
+                    && m.DeclaringType.FullName == "MDPro3.CardRarity" && m.Name == "GetRarity"))
+                    call.Operand = Method(hooks, method.Name == "MatchCardFilters" ? "SearchRarity" : "SortRarity", 1);
+            var match = Method(cardsManager, "MatchCardFilters", 4);
+            Prepend(match, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1),
+                Instruction.Create(OpCodes.Call, Method(hooks, "MatchesRarity", 2)),
+                Instruction.Create(OpCodes.Brtrue, match.Body.Instructions[0]), Instruction.Create(OpCodes.Ldc_I4_0), Instruction.Create(OpCodes.Ret) });
+            Prepend(Method(module.GetType("MDPro3.UI.Popup.PopupSearchFilter"), "Start", 0),
+                new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, Method(hooks, "ConfigureRarityFilter", 1)) });
 
             // Void actions return true from their hook when handled by the story session.
             Handle(Method(ui, "OnSave", 0), Method(hooks, "SaveUI", 1));
@@ -76,6 +106,7 @@ namespace MDPro3.Plugins.CodeGen
             Handle(Method(ui, "OnSubMenu", 0), Method(hooks, "SubMenu", 1));
             Handle(Method(ui, "OnRegulation", 0), Method(hooks, "Regulation", 1));
             Handle(Method(ui, "ShiftToAppearance", 0), Method(hooks, "BlockAppearance", 1));
+            Handle(Method(ui, "ChangeRarity", 1), Method(hooks, "ChangeRarity", 2));
             Guard(Method(view, "ImportCardLists", 1), Method(hooks, "AllowImport", 2));
             Guard(Method(ui, "TryStartHandTest", 1), Method(hooks, "AllowHandTest", 1));
 
@@ -114,6 +145,13 @@ namespace MDPro3.Plugins.CodeGen
             return true;
         }
 
+        private static IEnumerable<MethodDefinition> AllMethods(TypeDefinition type)
+        {
+            foreach (var method in type.Methods) yield return method;
+            foreach (var nested in type.NestedTypes)
+                foreach (var method in AllMethods(nested)) yield return method;
+        }
+
         private static MethodDefinition Method(TypeDefinition type, string name, int arguments)
         {
             var methods = type?.Methods.Where(m => m.Name == name && m.Parameters.Count == arguments).ToArray();
@@ -127,6 +165,19 @@ namespace MDPro3.Plugins.CodeGen
             var first = method.Body.Instructions[0]; var il = method.Body.GetILProcessor();
             foreach (var instruction in instructions) il.InsertBefore(first, instruction);
         }
+
+        private static void WrapReturn(MethodDefinition method, MethodDefinition hook)
+        {
+            foreach (var ret in method.Body.Instructions.Where(i => i.OpCode == OpCodes.Ret).ToArray())
+            {
+                ret.OpCode = OpCodes.Ldarg_0; ret.Operand = null;
+                var call = Instruction.Create(OpCodes.Call, hook);
+                method.Body.GetILProcessor().InsertAfter(ret, call);
+                method.Body.GetILProcessor().InsertAfter(call, Instruction.Create(OpCodes.Ret));
+            }
+        }
+
+        private static void AfterVoid(MethodDefinition method, MethodDefinition hook) => WrapReturn(method, hook);
 
         private static void Override(MethodDefinition target, MethodDefinition predicate, MethodDefinition replacement)
         {
@@ -142,8 +193,12 @@ namespace MDPro3.Plugins.CodeGen
 
         private static void Handle(MethodDefinition target, MethodDefinition hook)
         {
-            Prepend(target, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, hook),
-                Instruction.Create(OpCodes.Brfalse, target.Body.Instructions[0]), Instruction.Create(OpCodes.Ret) });
+            var code = new List<Instruction> { Instruction.Create(OpCodes.Ldarg_0) };
+            foreach (var parameter in target.Parameters.Take(hook.Parameters.Count - 1)) code.Add(Instruction.Create(OpCodes.Ldarg, parameter));
+            code.Add(Instruction.Create(OpCodes.Call, hook));
+            code.Add(Instruction.Create(OpCodes.Brfalse, target.Body.Instructions[0]));
+            code.Add(Instruction.Create(OpCodes.Ret));
+            Prepend(target, code);
         }
 
         private static void Guard(MethodDefinition target, MethodDefinition hook)

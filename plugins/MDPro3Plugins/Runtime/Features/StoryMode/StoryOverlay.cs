@@ -13,7 +13,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private RectTransform page;
         private TextMeshProUGUI stats, status;
         private string selected;
-        private int series, characterPage;
+        private int series, characterPage, level;
         private bool closing;
         private static readonly string[] Series = { "DM", "GX", "5D’s", "DSOD", "ZEXAL", "ARC-V", "VRAINS", "SEVENS", "Duel Links", "GO RUSH!!" };
 
@@ -32,6 +32,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private void Build()
         {
             selected = owner.SelectedCharacter; series = owner.SelectedSeries; characterPage = owner.SelectedPage;
+            level = Mathf.Clamp(owner.SelectedLevel, StoryProgress.MinLevel, StoryProgress.MaxLevel);
             StoryUI.Text(transform, "故事模式", .025f, .914f, .30f, .065f, 44);
             stats = StoryUI.Text(transform, "", .34f, .922f, .52f, .05f, 28, TextAlignmentOptions.MidlineRight);
             StoryUI.Button(transform, "返回", .89f, .922f, .085f, .05f, Back);
@@ -88,20 +89,34 @@ namespace MDPro3.Plugins.Features.StoryMode
             StoryUI.CharacterPicture(detail, "sn" + selected + "_2", .03f, .40f, .94f, .51f);
             string profile = Cid2Ydk.ReplaceWithCardName(CharacterSelector.characters.GetProfile(selected));
             StoryUI.Text(detail, profile.Replace("\n", ""), .06f, .235f, .88f, .16f, 22, TextAlignmentOptions.TopLeft);
-            bool ready = owner.Store.Current.opponents.TryGetValue(selected, out var enemy);
+            bool ready = owner.Store.Current.TryGetOpponent(selected, level, out var enemy);
+            int configured = owner.Store.Current.opponents.TryGetValue(selected, out var levels) && levels != null ? levels.Count : 0;
             int wins = owner.Store.Current.characterWins.TryGetValue(selected, out int valueWins) ? valueWins : 0;
-            StoryUI.Text(detail, (ready ? "角色卡组：" + enemy.main.Count + " 张主卡" : "角色卡组：尚未配置") + "  |  战胜 " + wins + " 次",
-                .04f, .17f, .92f, .06f, 21, TextAlignmentOptions.Center);
-            StoryUI.Button(detail, "编辑角色卡组 · 全卡库", .06f, .092f, .88f, .065f, () => owner.EditDeck(selected));
-            StoryUI.Button(detail, ready ? "开始挑战  ·  胜利 +" + owner.Rules.winDP + " DP" : "请先配置角色卡组",
-                .06f, .015f, .88f, .065f, () => owner.Challenge(selected), true).interactable = ready;
+            StoryUI.Text(detail, "难度", .04f, .18f, .105f, .05f, 20, TextAlignmentOptions.Center);
+            for (int i = StoryProgress.MinLevel; i <= StoryProgress.MaxLevel; i++)
+            {
+                int difficulty = i;
+                bool hasDeck = owner.Store.Current.TryGetOpponent(selected, difficulty, out _);
+                var button = StoryUI.Button(detail, difficulty.ToString(), .15f + (difficulty - 1) * .081f,
+                    .18f, .077f, .05f, () => { level = difficulty; ShowCharacters(); }, difficulty == level);
+                button.gameObject.name = "Difficulty" + difficulty;
+                if (hasDeck && difficulty != level) button.targetGraphic.color = StoryUI.Configured;
+            }
+            StoryUI.Text(detail, (ready ? level + "级卡组：" + enemy.main.Count + " 张主卡" : level + "级卡组：尚未配置")
+                + "  |  已配置 " + configured + "/10  |  战胜 " + wins + " 次",
+                .04f, .125f, .92f, .047f, 20, TextAlignmentOptions.Center);
+            StoryUI.Button(detail, "编辑 " + level + "级卡组 · 全卡库", .06f, .065f, .88f, .052f,
+                () => owner.EditDeck(selected, level));
+            StoryUI.Button(detail, ready ? "挑战 " + level + "级 · 胜利 +" + owner.Rules.WinReward(level) + " DP"
+                    : "请先配置 " + level + "级卡组",
+                .06f, .006f, .88f, .052f, () => owner.Challenge(selected, level), true).interactable = ready;
         }
 
-        internal void ShowConnecting(string name)
+        internal void ShowConnecting(string name, int level)
         {
             StoryUI.Clear(page);
-            StoryUI.Text(page, "正在准备与 " + name + " 的决斗…", .1f, .48f, .8f, .13f, 40, TextAlignmentOptions.Center);
-            StoryUI.Text(page, "使用已保存的玩家卡组与角色卡组。请在弹出的窗口中完成猜拳。", .1f, .34f, .8f, .1f, 25, TextAlignmentOptions.Center);
+            StoryUI.Text(page, "正在准备与 " + name + " 的 " + level + "级决斗…", .1f, .48f, .8f, .13f, 40, TextAlignmentOptions.Center);
+            StoryUI.Text(page, "使用已保存的玩家卡组与该等级角色卡组。请在弹出的窗口中完成猜拳。", .1f, .34f, .8f, .1f, 25, TextAlignmentOptions.Center);
             StoryUI.Button(page, "取消挑战", .39f, .19f, .22f, .08f, () => owner.CancelChallenge());
         }
 
@@ -122,6 +137,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (closing) return;
             owner.SelectedCharacter = selected; owner.SelectedSeries = series; owner.SelectedPage = characterPage;
+            owner.SelectedLevel = level;
             closing = true;
             if (ReferenceEquals(UIManager.InputBlocker, this)) UIManager.InputBlocker = null;
             gameObject.SetActive(false); Destroy(gameObject);

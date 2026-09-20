@@ -2,6 +2,10 @@ param(
     [switch]$ReusePlayer,
     [switch]$SkipCompile,
     [switch]$VisualOnly,
+    [switch]$OpeningOnly,
+    [Alias('SilverOnly')][switch]$FoilOnly,
+    [int]$Width = 1600,
+    [int]$Height = 900,
     [string]$GameProject = (Join-Path $PSScriptRoot '../../MDPro3'),
     [string]$PlayerRoot,
     [string]$UnityEditor = 'C:/Program Files/Unity/Hub/Editor/6000.0.24f1/Editor'
@@ -16,6 +20,10 @@ if (!$playerRoot.Replace('\', '/').EndsWith('/plugins/.selfcheck/story/player'))
     throw 'PlayerRoot must be the isolated plugins/.selfcheck/story/player directory.'
 }
 $managed = Join-Path $playerRoot 'MDPro3_Data/Managed'
+$iconRelative = 'MDPro3Plugins/Resources/MDPro3Plugins/StoryMode/Icon_Rarity_SR.png'
+$iconTarget = Join-Path (Join-Path $playerRoot 'plugins') $iconRelative
+New-Item -ItemType Directory -Path (Split-Path -Parent $iconTarget) -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $pluginRoot $iconRelative) -Destination $iconTarget
 # Normal Unity builds remove this compiler-only module attribute during linking. Match that
 # operation when loading our unlinked compile into the existing, stripped test player framework.
 [Reflection.Assembly]::LoadFile((Join-Path $UnityEditor 'Data/Managed/Unity.Cecil.dll')) | Out-Null
@@ -34,9 +42,11 @@ try {
 } finally { $assembly.Dispose() }
 $log = Join-Path $playerRoot 'story-runtime.log'
 $launchArgs = @(
-    '-screen-fullscreen', '0', '-screen-width', '1600', '-screen-height', '900', '-mdpro3-story-selftest', '-logFile', $log
+    '-screen-fullscreen', '0', '-screen-width', $Width, '-screen-height', $Height, '-mdpro3-story-selftest', '-logFile', $log
 )
 if ($VisualOnly) { $launchArgs += '-story-visual-only' }
+if ($OpeningOnly) { $launchArgs += '-story-opening-only' }
+if ($FoilOnly) { $launchArgs += '-story-foil-only' }
 $process = Start-Process -FilePath (Join-Path $playerRoot 'MDPro3.exe') -WorkingDirectory $playerRoot -WindowStyle Hidden -PassThru -ArgumentList $launchArgs
 Write-Output ('Isolated test process: ' + $process.Id)
 if (!$process.WaitForExit(270000)) {
@@ -45,4 +55,6 @@ if (!$process.WaitForExit(270000)) {
 }
 $result = Get-Content -LiteralPath $log | Select-String 'StoryMode runtime test:'
 $result | Write-Output
-if (!$result -or $result -notmatch 'PASS') { throw 'Isolated story test failed; see story-runtime.log.' }
+if (!$result -or !($result | Where-Object { $_.Line -match 'StoryMode runtime test: PASS ' })) {
+    throw 'Isolated story test failed; see story-runtime.log.'
+}

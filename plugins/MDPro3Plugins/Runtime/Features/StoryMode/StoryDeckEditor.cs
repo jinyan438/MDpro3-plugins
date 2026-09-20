@@ -18,9 +18,11 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal static StoryDeckEditor Active { get; private set; }
         internal readonly StoryModeFeature Owner;
         internal readonly string Character;
+        internal readonly int Level;
         internal readonly Banlist Banlist = new Banlist { Name = "故事模式" };
         internal DeckEditorUI UI;
         internal bool HandTestStarted;
+        internal readonly StoryRarityEditor Rarities;
         private readonly Deck previousDeck;
         private readonly string previousName, previousOnlineId, previousPack;
         private readonly bool previousLocal;
@@ -34,9 +36,10 @@ namespace MDPro3.Plugins.Features.StoryMode
         private bool entered;
         private bool initialized;
 
-        internal StoryDeckEditor(StoryModeFeature owner, string character)
+        internal StoryDeckEditor(StoryModeFeature owner, string character, int level)
         {
-            Owner = owner; Character = character;
+            Owner = owner; Character = character; Level = level;
+            Rarities = new StoryRarityEditor(this);
             previousDeck = DeckEditor.Deck; previousName = DeckEditor.DeckName;
             previousLocal = DeckEditor.DeckIsFromLocal; previousCondition = DeckEditor.condition;
             previousHistory = DeckEditor.historyCards; previousOnlineId = DeckEditor.onlineDeckID;
@@ -54,12 +57,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (!StoryDeckEditorHooks.Installed())
                 throw new InvalidOperationException("故事模式编辑器接入尚未编译，请重建插件后再试。");
             var draft = Character == null ? Owner.Store.Current.player
-                : Owner.Store.Current.opponents.TryGetValue(Character, out var saved) ? saved : new StoryDeck();
+                : Owner.Store.Current.TryGetOpponent(Character, Level, out var saved) ? saved : new StoryDeck();
             Active = this;
             DeckEditor.condition = DeckEditor.Condition.EditDeck;
             DeckEditor.Deck = ToGame(draft);
             DeckEditor.DeckName = Character == null ? "故事模式 · 我的卡组"
-                : "故事模式 · " + CharacterSelector.characters.GetName(Character);
+                : "故事模式 · " + CharacterSelector.characters.GetName(Character) + " · " + Level + "级";
             DeckEditor.DeckIsFromLocal = true;
             DeckEditor.onlineDeckID = null;
             DeckEditor.historyCards = new List<int>();
@@ -117,7 +120,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (!view.deckLoaded) return false;
             var deck = FromGame(view.FromObjectDeckToCodedDeck());
-            if (!Owner.SaveDeck(Character, deck)) return false;
+            if (!Owner.SaveDeck(Character, Level, deck)) return false;
             // Separate objects: native YDKE import mutates DeckView.Deck before printing.
             view.Deck = ToGame(deck); DeckEditor.Deck = ToGame(deck);
             view.SetDirty(false);
@@ -127,17 +130,25 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         internal bool AllowedDraft(Deck deck, bool complete)
         {
-            string invalid = StoryProgress.ValidateDeck(FromGame(deck), Character == null ? Owner.Store.Current.owned : null,
-                StoryCatalog.Playable, StoryCatalog.IsExtra, StoryCatalog.Identity, complete);
+            var draft = Rarities.Import(deck);
+            string invalid = StoryProgress.ValidateDeck(draft, Character == null ? Owner.Store.Current.owned : null,
+                StoryCatalog.Playable, StoryCatalog.IsExtra, StoryCatalog.Identity, complete, Character == null ? Owner.Store.Current : null);
+            if (invalid == null) Rarities.Remember(deck, draft);
             if (invalid == null) return true;
             MessageManager.Toast(invalid); return false;
         }
 
-        internal static StoryDeck FromGame(Deck deck) => deck == null ? null : new StoryDeck
+        internal static StoryDeck FromGame(Deck deck) => deck != null
+            && Active != null && Active.Rarities.Read(deck, out var saved) ? saved.Copy() : PlainDeck(deck);
+        internal static StoryDeck PlainDeck(Deck deck) => deck == null ? null : new StoryDeck
         { main = deck.Main == null ? null : new List<int>(deck.Main), extra = deck.Extra == null ? null : new List<int>(deck.Extra),
             side = deck.Side == null ? null : new List<int>(deck.Side) };
-        internal static Deck ToGame(StoryDeck deck) => new Deck
-        { Main = new List<int>(deck.main), Extra = new List<int>(deck.extra), Side = new List<int>(deck.side) };
+        internal static Deck ToGame(StoryDeck deck)
+        {
+            var game = new Deck { Main = new List<int>(deck.main), Extra = new List<int>(deck.extra), Side = new List<int>(deck.side) };
+            if (Active != null) Active.Rarities.Remember(game, deck);
+            return game;
+        }
     }
 
     public static class StoryDeckEditorHooks
@@ -147,6 +158,105 @@ namespace MDPro3.Plugins.Features.StoryMode
         public static bool Active() => StoryDeckEditor.Active != null;
         public static Banlist GetBanlist() => StoryDeckEditor.Active.Banlist;
         public static bool UsesView(DeckView view) => StoryDeckEditor.Active?.Owns(view) == true;
+        public static bool UsesPlayerView(DeckView view) => UsesView(view) && StoryDeckEditor.Active.Character == null;
+        public static bool BlockFreeRarity(DeckEditorUI ui) => StoryDeckEditor.Active?.Owns(ui) == true && StoryDeckEditor.Active.Character == null;
+        public static bool ChangeRarity(DeckEditorUI ui, CardRarity.Rarity rarity)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session?.Owns(ui) != true) return false;
+            if (!BlockFreeRarity(ui))
+            {
+                var card = ui._ResponseRegion == DeckEditorUI.ResponseRegion.Action ? ui.CardActionMenu.Card : ui.CardDetailView?.Card;
+                if (card != null) session.Rarities.ChangeOpponent(card.Id, (StoryRarity)(int)rarity);
+            }
+            return true;
+        }
+
+        public static SelectionButton_CardInDeck StampCard(SelectionButton_CardInDeck card, DeckView view)
+        {
+            if (UsesView(view)) StoryDeckEditor.Active.Rarities.Stamp(view, card);
+            return card;
+        }
+        public static Card PrepareCard(DeckView view, Card card) => UsesView(view) ? card.Clone() : card;
+        public static void SelectWidgetVersion(UIWidgetCardBase widget, Card card)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session?.Owns(widget) == true) session.Rarities.SelectCopy(card);
+        }
+        public static Deck ExportRarities(Deck deck, DeckView view)
+        {
+            if (UsesView(view)) StoryDeckEditor.Active.Rarities.Export(view, deck);
+            return deck;
+        }
+        public static SelectionButton_CardInDeck FindVersion(DeckView view, Card card)
+        {
+            var rarity = StoryDeckEditor.Active.Rarities.Selected(card.Id);
+            return view.cards.FirstOrDefault(c => c.Card.Id == card.Id && StoryRarityEditor.Finish(c) == rarity);
+        }
+        public static void SelectDeckVersion(SelectionButton_CardInDeck card)
+        {
+            if (UsesView(card.deckView)) StoryDeckEditor.Active.Rarities.Select(card.Card.Id, StoryRarityEditor.Finish(card));
+        }
+        public static void ConfigureCardWidget(UIWidgetCardBase widget)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session?.Owns(widget) != true) return;
+            if (session.Character == null) StoryRarityPicker.Attach(widget);
+            else StoryOpponentRarity.Attach(widget);
+        }
+        public static void StyleCard(CardRawImageHandler image)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session == null || image.card == null
+                || PluginGame.CurrentServant != Program.instance.deckEditor) return;
+            var deckCard = image.GetComponentInParent<SelectionButton_CardInDeck>();
+            var copy = deckCard?.GetComponent<StoryDeckCardVersion>() ?? image.GetComponent<StoryCardFinish>()?.DeckCopy;
+            StoryCardFinish.Apply(image, copy != null ? copy.Rarity : session.Rarities.Selected(image.card.Id));
+        }
+        public static CardRarity.Rarity SearchRarity(int code)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session == null || session.Character != null || PluginGame.CurrentServant != Program.instance.deckEditor)
+                return CardRarity.GetRarity(code);
+            int mask = 0;
+            foreach (var rarity in StoryProgress.Rarities)
+                if (session.Owner.Store.Current.Owned(code, rarity) > 0) mask |= (int)rarity;
+            return (CardRarity.Rarity)mask;
+        }
+
+        public static int SortRarity(int code)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session == null || session.Character != null || PluginGame.CurrentServant != Program.instance.deckEditor)
+                return (int)CardRarity.GetRarity(code);
+            for (int i = StoryProgress.Rarities.Length - 1; i >= 0; i--)
+                if (session.Owner.Store.Current.Owned(code, StoryProgress.Rarities[i]) > 0) return i + 1;
+            return 0;
+        }
+
+        public static bool MatchesRarity(Card card, List<long> filters)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session == null || session.Character != null || PluginGame.CurrentServant != Program.instance.deckEditor
+                || filters == null || filters.Count <= 8 || filters[8] == 0) return true;
+            // The native legacy shortcut treats mask 7 as all tiers, which excludes story SR/GR/MR.
+            return (filters[8] & (long)SearchRarity(card.Id)) != 0;
+        }
+
+        public static void ConfigureRarityFilter(MDPro3.UI.Popup.PopupSearchFilter popup)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session == null || session.Character != null || PluginGame.CurrentServant != Program.instance.deckEditor) return;
+            var toggles = popup.GetComponentsInChildren<SelectionToggle_SearchFilter>(true);
+            if (toggles.Any(t => t.group == 8 && t.filterCode == (int)StoryRarity.SR)) return;
+            var source = toggles.FirstOrDefault(t => t.group == 8 && t.filterCode == (int)StoryRarity.R);
+            if (source == null) return;
+            var silver = UnityEngine.Object.Instantiate(source, source.transform.parent);
+            silver.name = "StorySRFilter"; silver.code = silver.subCode = 0;
+            silver.filterCode = (int)StoryRarity.SR;
+            silver.SetButtonText("SR"); silver.SetToggleOff();
+            silver.transform.SetSiblingIndex(source.transform.GetSiblingIndex() + 1);
+        }
 
         public static List<int> FilterCards(CardCollectionView view, List<int> cards)
         {
@@ -169,6 +279,9 @@ namespace MDPro3.Plugins.Features.StoryMode
             else if (session.Character == null && (!session.Owner.Store.Current.owned.TryGetValue(code, out int owned)
                 || view.cards.Count(c => c.Card.Id == code) >= owned))
                 invalid = "已用完这张卡的持有数量，请通过故事卡包获取更多。";
+            else if (session.Character == null && session.Rarities.Used(code, session.Rarities.Selected(code))
+                >= session.Owner.Store.Current.Owned(code, session.Rarities.Selected(code)))
+                invalid = "已用完 " + session.Rarities.Selected(code) + " 版本，请选择其他持有版本或继续开包。";
             if (invalid != null && showToast) MessageManager.Toast(invalid);
             return invalid == null;
         }
@@ -192,8 +305,15 @@ namespace MDPro3.Plugins.Features.StoryMode
             return true;
         }
 
-        public static bool AllowImport(DeckView view, Deck deck) => !UsesView(view)
-            || StoryDeckEditor.Active.AllowedDraft(deck, false);
+        public static bool AllowImport(DeckView view, Deck deck)
+        {
+            if (!UsesView(view)) return true;
+            var session = StoryDeckEditor.Active;
+            if (!session.AllowedDraft(deck, false)) return false;
+            // Native ImportCardLists copies the imported IDs into the existing Deck object.
+            if (session.Rarities.Read(deck, out var draft)) session.Rarities.Remember(view.Deck, draft);
+            return true;
+        }
         public static bool AllowHandTest(DeckEditorUI ui)
         {
             var session = StoryDeckEditor.Active;
@@ -225,7 +345,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (StoryDeckEditor.Active?.Owns(ui) != true) return false;
             UIManager.ShowPopupConfirm(new List<string> { "故事模式构筑规则",
                 "主卡组 40–60 张，额外和副卡组各最多 15 张，同名卡合计最多 3 张。@n"
-                + (StoryDeckEditor.Active.Character == null ? "玩家只能使用初始卡组和故事卡包获得的卡片，不能超过持有张数。" : "角色卡组可使用本体全卡库。") });
+                + (StoryDeckEditor.Active.Character == null ? "玩家只能使用持有的 N/R/SR/UR/GR/MR 版本，各版本不能超过持有数量，所有版本合计仍最多 3 张。" : "角色卡组可使用本体全卡库。") });
             return true;
         }
 
@@ -238,7 +358,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 new List<Action> { null,
                     () => {
                         var original = session.Character == null ? session.Owner.Store.Current.player
-                            : session.Owner.Store.Current.opponents.TryGetValue(session.Character, out var saved) ? saved : new StoryDeck();
+                            : session.Owner.Store.Current.TryGetOpponent(session.Character, session.Level, out var saved) ? saved : new StoryDeck();
                         ui.DeckView.PrintDeck(StoryDeckEditor.ToGame(original), DeckEditor.DeckName, DeckView.Condition.Editable);
                     }, ui.OnRandom, () => ui.DeckView.ClearDeck(),
                     () => ui.DeckView.ImportCardLists(StoryDeckEditor.ToGame(StoryCatalog.Starter())),
@@ -259,7 +379,10 @@ namespace MDPro3.Plugins.Features.StoryMode
             name.readOnly = true;
             ui.DeckView.ButtonDeck.gameObject.SetActive(false);
             ui.Manager.GetNestedElement("AppearanceGroup").SetActive(false);
-            StoryUI.Text(ui.transform, session.Character == null ? "故事模式 · 持有卡池" : "故事模式 · 角色全卡库",
+            if (session.Character == null)
+                foreach (var toggle in ui.GetComponentsInChildren<SelectionToggle_Rarity>(true)) toggle.gameObject.SetActive(false);
+            StoryUI.Text(ui.transform, session.Character == null ? "故事模式 · 持有卡池"
+                : "故事模式 · 角色全卡库 · " + session.Level + "级",
                 .055f, .936f, .34f, .045f, 25);
         }
     }

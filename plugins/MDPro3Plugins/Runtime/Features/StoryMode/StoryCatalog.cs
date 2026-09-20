@@ -20,7 +20,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             return card != null && card.Alias > 0 ? card.Alias : id;
         }
         public static string Validate(StoryDeck deck, StorySave save = null) =>
-            StoryProgress.ValidateDeck(deck, save?.owned, Playable, IsExtra, Identity);
+            StoryProgress.ValidateDeck(deck, save?.owned, Playable, IsExtra, Identity, true, save);
 
         public static StoryDeck Starter()
         {

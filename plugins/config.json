@@ -19,7 +19,7 @@
     {
       "id": "storyMode",
       "enabled": true,
-      "note": "主界面：故事模式，角色挑战、独立卡池、DP 和按年代解锁卡包"
+      "note": "主界面：故事模式，角色 1–10 级挑战、独立卡池、DP 和按年代解锁卡包"
     }
   ],
   "logFeatureTicks": false,
