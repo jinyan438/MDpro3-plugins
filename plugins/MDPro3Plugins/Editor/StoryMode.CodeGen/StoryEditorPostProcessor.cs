@@ -69,7 +69,7 @@ namespace MDPro3.Plugins.CodeGen
             Override(Method(view, "CanAddCard", 2), Method(hooks, "UsesView", 1), Method(hooks, "CanAdd", 3));
             Override(Method(view, "Save", 0), Method(hooks, "UsesView", 1), Method(hooks, "SaveView", 1));
             Override(Method(editor, "get_Banlist", 0), Method(hooks, "Active", 0), Method(hooks, "GetBanlist", 0));
-            Override(Method(view, "GetCardByData", 1), Method(hooks, "UsesPlayerView", 1), Method(hooks, "FindVersion", 2));
+            Override(Method(view, "GetCardByData", 1), Method(hooks, "UsesView", 1), Method(hooks, "FindVersion", 2));
             WrapReturn(Method(view, "AddCard", 4), Method(hooks, "StampCard", 2));
             var addCopy = Method(view, "AddCard", 4);
             Prepend(addCopy, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1),
@@ -77,9 +77,10 @@ namespace MDPro3.Plugins.CodeGen
             WrapReturn(Method(view, "FromObjectDeckToCodedDeck", 0), Method(hooks, "ExportRarities", 2));
             Prepend(Method(module.GetType("MDPro3.UI.SelectionButton_CardInDeck"), "ShowThisCard", 0),
                 new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, Method(hooks, "SelectDeckVersion", 1)) });
-            AfterVoid(Method(module.GetType("MDPro3.UI.UIWidgetCardBase"), "SetCardData", 1), Method(hooks, "ConfigureCardWidget", 1));
-            Prepend(Method(module.GetType("MDPro3.UI.UIWidgetCardBase"), "SetCardData", 1),
-                new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1), Instruction.Create(OpCodes.Call, Method(hooks, "SelectWidgetVersion", 2)) });
+            var widgetData = Method(module.GetType("MDPro3.UI.UIWidgetCardBase"), "SetCardData", 1);
+            AfterVoid(widgetData, Method(hooks, "ConfigureCardWidget", 1));
+            Prepend(widgetData, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1),
+                Instruction.Create(OpCodes.Call, Method(hooks, "PrepareWidgetCard", 2)), Instruction.Create(OpCodes.Starg, widgetData.Parameters[0]) });
             var setCard = module.GetType("MDPro3.UI.CardRawImageHandler").Methods.Single(m => m.Name == "SetCard"
                 && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.FullName == "MDPro3.Duel.YGOSharp.Card");
             AfterVoid(setCard, Method(hooks, "StyleCard", 1));

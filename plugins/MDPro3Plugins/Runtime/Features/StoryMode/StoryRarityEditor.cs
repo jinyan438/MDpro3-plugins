@@ -15,6 +15,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private readonly Dictionary<Deck, StoryDeck> decks = new Dictionary<Deck, StoryDeck>();
         private readonly Dictionary<int, StoryRarity> choices = new Dictionary<int, StoryRarity>();
         private readonly Dictionary<Card, StoryRarity> copies = new Dictionary<Card, StoryRarity>();
+        private Card pendingDetailCopy;
         internal StoryRarityEditor(StoryDeckEditor session) { this.session = session; }
         internal void Remember(Deck game, StoryDeck story) { decks[game] = story.Copy(); }
         internal bool Read(Deck game, out StoryDeck story)
@@ -24,6 +25,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 && game.Main.SequenceEqual(story.main) && game.Extra.SequenceEqual(story.extra) && game.Side.SequenceEqual(story.side);
         }
         internal int Used(int id, StoryRarity rarity) => session.UI?.DeckView.cards?.Count(c => c.Card.Id == id && Finish(c) == rarity) ?? 0;
+        internal StoryRarity Selected(Card card) => copies.TryGetValue(card, out var rarity) ? rarity : Selected(card.Id);
         internal StoryRarity Selected(int id)
         {
             if (choices.TryGetValue(id, out var rarity)) return rarity;
@@ -43,23 +45,48 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (session.UI != null)
                 foreach (var image in session.UI.GetComponentsInChildren<CardRawImageHandler>(true))
                     if (image.card?.Id == id && image.GetComponentInParent<SelectionButton_CardInDeck>() == null
-                        && image.GetComponent<StoryCardFinish>()?.DeckCopy == null)
+                        && image.GetComponent<StoryCardFinish>()?.DeckCopy == null
+                        && (session.Character == null || !copies.ContainsKey(image.card)))
                         StoryCardFinish.Apply(image, rarity);
         }
 
-        internal void ChangeOpponent(int id, StoryRarity rarity)
+        internal void ChangeOpponent(Card target, StoryRarity rarity)
         {
-            if (session.Character == null || !StoryProgress.ValidRarity(rarity)) return;
-            Select(id, rarity);
-            foreach (var card in session.UI.DeckView.cards.Where(c => c.Card.Id == id))
+            if (session.Character == null || target == null || !StoryProgress.ValidRarity(rarity)) return;
+            var card = session.UI.DeckView.cards.FirstOrDefault(c => ReferenceEquals(c.Card, target));
+            // A removed card can remain in an open widget until its native animation finishes.
+            if (card == null && copies.ContainsKey(target)) return;
+            Select(target.Id, rarity);
+            if (card != null)
             {
                 if (Finish(card) != rarity) session.UI.DeckView.SetDirty(true);
                 card.GetComponent<StoryDeckCardVersion>().Rarity = rarity;
                 copies[card.Card] = rarity;
             }
             foreach (var image in session.UI.GetComponentsInChildren<CardRawImageHandler>(true))
-                if (image.card?.Id == id) StoryCardFinish.Apply(image, rarity);
+                if (ReferenceEquals(image.card, target)) StoryCardFinish.Apply(image, rarity);
             foreach (var picker in session.UI.GetComponentsInChildren<StoryOpponentRarity>(true)) picker.Refresh();
+        }
+
+        internal void SelectDeckCopy(SelectionButton_CardInDeck card)
+        {
+            Select(card.Card.Id, Finish(card));
+            // ShowThisCard converts the selected tile to a code list before calling the detail widget.
+            if (session.Character != null && session.UI?.CardDetailView != null) pendingDetailCopy = card.Card;
+        }
+
+        internal Card PrepareWidgetCard(UIWidgetCardBase widget, Card card)
+        {
+            if (session.Character != null && widget is CardDetailView)
+            {
+                if (pendingDetailCopy?.Id == card.Id) card = pendingDetailCopy;
+                pendingDetailCopy = null;
+            }
+            SelectCopy(card);
+            // Native SetCardData returns early for the same ID, but each copy needs its own reference.
+            if (session.Character != null && widget.Card?.Id == card.Id && !ReferenceEquals(widget.Card, card))
+                widget.Card = card;
+            return card;
         }
 
         internal static StoryRarity Finish(SelectionButton_CardInDeck card) =>

@@ -187,12 +187,70 @@ namespace MDPro3.Plugins.Diagnostics
             var store = new StoryStore(StoryDeckEditor.Active.Owner.Store.DirectoryPath); store.Load(StoryCatalog.Starter);
             Check(store.Current.TryGetOpponent(StoryDeckEditor.Active.Character, StoryDeckEditor.Active.Level, out var saved)
                 && saved.Copies().Count(c => c.id == id && c.rarity == StoryRarity.SR) == 2, "opponent SR versions survive disk reload");
-            ui._ResponseRegion = DeckEditorUI.ResponseRegion.Collection;
+            var pointer = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
+            ui._ResponseRegion = DeckEditorUI.ResponseRegion.Deck;
+            ClickCopy(copies[0], pointer);
+            Check(ReferenceEquals(ui.CardDetailView.Card, copies[0].Card), "native code-list detail preserves the first physical copy");
             ui.ChangeRarity(CardRarity.Rarity.Royal);
-            Check(ui.DeckView.GetDirty() && copies.All(c => StoryRarityEditor.Finish(c) == StoryRarity.UR),
-                "changing an existing opponent card updates its copies and marks the deck dirty");
+            Check(ui.DeckView.GetDirty() && StoryRarityEditor.Finish(copies[0]) == StoryRarity.UR
+                && StoryRarityEditor.Finish(copies[1]) == StoryRarity.SR, "changing one opponent copy leaves its same-name neighbor unchanged");
+            ClickCopy(copies[1], pointer);
+            Check(ReferenceEquals(ui.CardDetailView.Card, copies[1].Card) && sr.isOn, "switching to the same-name second copy restores its own SR button");
+            Check(ui.DeckView.GetCardByData(ui.CardDetailView.Card) == copies[1], "minus-one targets the second physical copy");
+            sr.OnPointerClick(pointer);
+            Check(StoryRarityEditor.Finish(copies[1]) == StoryRarity.N && StoryRarityEditor.Finish(copies[0]) == StoryRarity.UR,
+                "toggling SR off changes only the selected copy to N");
             ui.ChangeRarity((CardRarity.Rarity)(int)StoryRarity.SR);
-            Check(copies.All(c => StoryRarityEditor.Finish(c) == StoryRarity.SR), "existing opponent copies can switch back to SR");
+
+            var actionCards = copies.Select(c => c.Card).ToList();
+            ui.CardActionMenu.Show(actionCards, 0, DeckEditorUI.ResponseRegion.Deck);
+            ui._ResponseRegion = DeckEditorUI.ResponseRegion.Action;
+            ui.ChangeRarity(CardRarity.Rarity.Gold);
+            Check(StoryRarityEditor.Finish(copies[0]) == StoryRarity.GR && StoryRarityEditor.Finish(copies[1]) == StoryRarity.SR,
+                "action menu changes only its displayed physical copy");
+            ui.CardActionMenu.Show(actionCards, 1, DeckEditorUI.ResponseRegion.Deck);
+            Check(ReferenceEquals(ui.CardActionMenu.Card, copies[1].Card), "same-name action menu cards keep separate references");
+            ui.ChangeRarity(CardRarity.Rarity.Millennium);
+            Check(StoryRarityEditor.Finish(copies[0]) == StoryRarity.GR && StoryRarityEditor.Finish(copies[1]) == StoryRarity.MR,
+                "changing the second action card preserves the first");
+            ui.ChangeRarity((CardRarity.Rarity)(int)StoryRarity.SR);
+            ui.CardActionMenu.Hide(); ui._ResponseRegion = DeckEditorUI.ResponseRegion.Deck;
+            ClickCopy(copies[0], pointer); ui.ChangeRarity(CardRarity.Rarity.Royal);
+            ui.DeckView.MoveCardToLocation(copies[0], DeckView.DeckLocation.SideDeck, copies[0].transform.position);
+            ui.DeckView.MoveCardToLocation(copies[0], DeckView.DeckLocation.MainDeck, copies[0].transform.position);
+            ui.OnSave();
+
+            ui._ResponseRegion = DeckEditorUI.ResponseRegion.Collection;
+            ui.ShowDetail(CardsManager.Get(id)); ui.ChangeRarity(CardRarity.Rarity.Shine);
+            Check(!ui.DeckView.GetDirty() && StoryRarityEditor.Finish(copies[0]) == StoryRarity.UR && StoryRarityEditor.Finish(copies[1]) == StoryRarity.SR,
+                "collection rarity selection does not change existing copies or dirty their deck");
+            Check(ui.DeckView.AddCard(CardsManager.Get(id), false, false), "collection choice creates a new independent copy");
+            var added = ui.DeckView.cards.Single(c => c.Card.Id == id && c != copies[0] && c != copies[1]);
+            Check(StoryRarityEditor.Finish(added) == StoryRarity.R && !ui.DeckView.CanAddCard(id, false),
+                "UR plus SR plus R obey the combined three-copy limit");
+            ui.DeckView.RemoveCard(added, false, false, true);
+            ui.DeckView.Randomize(); ui.OnSave();
+        }
+
+        internal static void CheckOpponentMixedReload(DeckEditorUI ui, int id)
+        {
+            var copies = ui.DeckView.cards.Where(c => c.Card.Id == id).ToArray();
+            Check(copies.Length == 2 && copies.Count(c => StoryRarityEditor.Finish(c) == StoryRarity.SR) == 1
+                && copies.Count(c => StoryRarityEditor.Finish(c) == StoryRarity.UR) == 1,
+                "shuffle and reprint preserve different rarities on same-name opponent copies");
+            var sr = copies.Single(c => StoryRarityEditor.Finish(c) == StoryRarity.SR);
+            Check(sr.GetComponentInChildren<StoryCardFoil>()?.HasRenderedFoil == true, "mixed opponent deck restores the SR foil");
+            var ur = copies.Single(c => StoryRarityEditor.Finish(c) == StoryRarity.UR);
+            Check(ur.GetComponentInChildren<CardRawImageHandler>().RawImage.material.shader.name.Contains("Royal"), "mixed opponent deck restores the UR material");
+            var session = StoryDeckEditor.Active;
+            var store = new StoryStore(session.Owner.Store.DirectoryPath); store.Load(StoryCatalog.Starter);
+            Check(store.Current.TryGetOpponent(session.Character, session.Level, out var saved)
+                && saved.Copies().Count(c => c.id == id && c.rarity == StoryRarity.SR) == 1
+                && saved.Copies().Count(c => c.id == id && c.rarity == StoryRarity.UR) == 1,
+                "same-name opponent copies retain separate finishes on disk");
+            ui.ShowDetail(sr.Card);
+            Check(ui.CardDetailView.GetComponentsInChildren<SelectionToggle_Rarity>().Single(t => (int)t.rarity == (int)StoryRarity.SR).isOn,
+                "mixed deck selection restores the displayed copy's toggle");
         }
 
         internal static void CheckFilter(MDPro3.UI.Popup.PopupSearchFilter popup)
@@ -207,6 +265,12 @@ namespace MDPro3.Plugins.Diagnostics
             Check(CardCollectionView.filters[8] == (int)StoryRarity.SR
                 && StoryDeckEditor.Active.UI.CardCollectionView.printedCards.Contains(code), "SR filter selection reaches actual collection results");
         }
+        private static void ClickCopy(SelectionButton_CardInDeck copy, UnityEngine.EventSystems.PointerEventData pointer)
+        {
+            copy.GetSelectable().Select();
+            UnityEngine.EventSystems.ExecuteEvents.Execute(copy.gameObject, pointer, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+        }
+
         private static void Check(bool value, string message)
         {
             if (!value) throw new InvalidOperationException("Rarity: " + message);

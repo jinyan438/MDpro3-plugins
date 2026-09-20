@@ -215,6 +215,14 @@ namespace MDPro3.Plugins.Diagnostics
                 case 30:
                     if (!EditorReady()) return;
                     StoryRaritySelfTest.CheckOpponentReload(Program.instance.deckEditor.GetUI<DeckEditorUI>(), unowned);
+                    Program.instance.deckEditor.GetUI<DeckEditorUI>().DeckView.PrintDeck(
+                        StoryDeckEditor.ToGame(StoryDeckEditor.FromGame(Program.instance.deckEditor.GetUI<DeckEditorUI>().DeckView.FromObjectDeckToCodedDeck())),
+                        DeckEditor.DeckName, DeckView.Condition.Editable);
+                    Advance(40, 3); break;
+                case 40:
+                    if (!EditorReady()) return;
+                    StoryRaritySelfTest.CheckOpponentMixedReload(Program.instance.deckEditor.GetUI<DeckEditorUI>(), unowned);
+                    if (!Capture("03c-character-mixed-copies")) return;
                     Program.instance.deckEditor.GetUI<DeckEditorUI>().DeckView.AddCard(CardsManager.Get(unowned), false, false);
                     Program.instance.deckEditor.OnReturn(); Advance(21, 1); break;
                 case 21:

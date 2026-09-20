@@ -68,7 +68,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             var session = StoryDeckEditor.Active;
             if (session == null || session.Character == null || widget.Card == null || toggles == null) return;
-            var rarity = session.Rarities.Selected(widget.Card.Id);
+            var rarity = session.Rarities.Selected(widget.Card);
             foreach (var toggle in toggles)
             {
                 bool selected = (int)toggle.rarity == (int)rarity;

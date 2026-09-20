@@ -36,7 +36,7 @@ internal static class StoryEditorWeaverTests
                 .Count(i => i.OpCode == OpCodes.Call && i.Operand is MethodReference r
                     && r.DeclaringType.Name == "StoryDeckEditorHooks");
             Check(calls >= 15, "all native guards inserted");
-            foreach (string hook in new[] { "StampCard", "ExportRarities", "ChangeRarity", "StyleCard", "SearchRarity", "FindVersion", "ConfigureRarityFilter", "MatchesRarity" })
+            foreach (string hook in new[] { "StampCard", "ExportRarities", "ChangeRarity", "StyleCard", "SearchRarity", "FindVersion", "PrepareWidgetCard", "ConfigureRarityFilter", "MatchesRarity" })
                 Check(patched.MainModule.Types.SelectMany(t => t.Methods).Where(m => m.HasBody).Any(m =>
                     m.Body.Instructions.Any(i => i.OpCode == OpCodes.Call && i.Operand is MethodReference r
                         && r.DeclaringType.Name == "StoryDeckEditorHooks" && r.Name == hook)), "rarity hook inserted: " + hook);

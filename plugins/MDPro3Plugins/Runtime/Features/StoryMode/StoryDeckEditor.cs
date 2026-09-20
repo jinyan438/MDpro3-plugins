@@ -167,7 +167,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (!BlockFreeRarity(ui))
             {
                 var card = ui._ResponseRegion == DeckEditorUI.ResponseRegion.Action ? ui.CardActionMenu.Card : ui.CardDetailView?.Card;
-                if (card != null) session.Rarities.ChangeOpponent(card.Id, (StoryRarity)(int)rarity);
+                if (card != null) session.Rarities.ChangeOpponent(card, (StoryRarity)(int)rarity);
             }
             return true;
         }
@@ -178,10 +178,10 @@ namespace MDPro3.Plugins.Features.StoryMode
             return card;
         }
         public static Card PrepareCard(DeckView view, Card card) => UsesView(view) ? card.Clone() : card;
-        public static void SelectWidgetVersion(UIWidgetCardBase widget, Card card)
+        public static Card PrepareWidgetCard(UIWidgetCardBase widget, Card card)
         {
             var session = StoryDeckEditor.Active;
-            if (session?.Owns(widget) == true) session.Rarities.SelectCopy(card);
+            return session?.Owns(widget) == true ? session.Rarities.PrepareWidgetCard(widget, card) : card;
         }
         public static Deck ExportRarities(Deck deck, DeckView view)
         {
@@ -190,12 +190,17 @@ namespace MDPro3.Plugins.Features.StoryMode
         }
         public static SelectionButton_CardInDeck FindVersion(DeckView view, Card card)
         {
+            if (StoryDeckEditor.Active.Character != null)
+            {
+                var copy = view.cards.FirstOrDefault(c => ReferenceEquals(c.Card, card));
+                if (copy != null) return copy;
+            }
             var rarity = StoryDeckEditor.Active.Rarities.Selected(card.Id);
             return view.cards.FirstOrDefault(c => c.Card.Id == card.Id && StoryRarityEditor.Finish(c) == rarity);
         }
         public static void SelectDeckVersion(SelectionButton_CardInDeck card)
         {
-            if (UsesView(card.deckView)) StoryDeckEditor.Active.Rarities.Select(card.Card.Id, StoryRarityEditor.Finish(card));
+            if (UsesView(card.deckView)) StoryDeckEditor.Active.Rarities.SelectDeckCopy(card);
         }
         public static void ConfigureCardWidget(UIWidgetCardBase widget)
         {
@@ -211,7 +216,8 @@ namespace MDPro3.Plugins.Features.StoryMode
                 || PluginGame.CurrentServant != Program.instance.deckEditor) return;
             var deckCard = image.GetComponentInParent<SelectionButton_CardInDeck>();
             var copy = deckCard?.GetComponent<StoryDeckCardVersion>() ?? image.GetComponent<StoryCardFinish>()?.DeckCopy;
-            StoryCardFinish.Apply(image, copy != null ? copy.Rarity : session.Rarities.Selected(image.card.Id));
+            StoryCardFinish.Apply(image, copy != null ? copy.Rarity : session.Character != null
+                ? session.Rarities.Selected(image.card) : session.Rarities.Selected(image.card.Id));
         }
         public static CardRarity.Rarity SearchRarity(int code)
         {
