@@ -40,7 +40,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             StoryUI.Button(transform, "角色挑战", .025f, .825f, .19f, .06f, () => { if (!owner.Launching) ShowCharacters(); });
             StoryUI.Button(transform, "我的卡组", .225f, .825f, .19f, .06f, () => owner.EditDeck(null));
             StoryUI.Button(transform, "DP 卡包商店", .425f, .825f, .22f, .06f, () => { if (!owner.Launching) owner.OpenShop(); });
-            StoryUI.Text(transform, "初始卡组 → 角色挑战 → 获取 DP → 拆包构筑", .67f, .824f, .30f, .06f, 21);
+            StoryUI.Button(transform, "模型设置", .755f, .825f, .22f, .06f,
+                () => { if (!owner.Launching) StoryModelSettings.Open(this); }).name = "OpenModelSettings";
             page = StoryUI.Rect("Page", transform, .025f, .068f, .95f, .73f);
             status = StoryUI.Text(transform, owner.Notice, .025f, .012f, .95f, .04f, 23);
             RefreshStats();
@@ -53,6 +54,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             int unlocked = owner.Packs.Count(owner.Unlocked);
             stats.text = save.dp + " DP   |   " + save.completedDuels + " 战 / " + save.wins + " 胜   |   卡包 " + unlocked + "/" + owner.Packs.Count;
         }
+
+        internal void ModelSettingsSaved() { status.text = "模型设置已保存，下次挑战生效。"; }
 
         private void ShowCharacters()
         {

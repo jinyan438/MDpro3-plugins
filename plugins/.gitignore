@@ -1,1 +1,5 @@
 /StoryMode/
+/story-ai.local.json
+/story-ai.secret.local
+/story-ai.secret.local.*.tmp
+/story-ai.local.json.*.tmp

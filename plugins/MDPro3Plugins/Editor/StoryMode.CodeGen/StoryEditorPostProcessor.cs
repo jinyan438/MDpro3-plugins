@@ -61,6 +61,7 @@ namespace MDPro3.Plugins.CodeGen
             if (hooks == null) return false; // Plugin removed / disabled at build time.
             var marker = Method(hooks, "Installed", 0);
             if (marker.Body.Instructions.Any(i => i.OpCode == OpCodes.Ldc_I4_1)) return false;
+            InstallStoryModel(module);
             var view = module.GetType("MDPro3.UI.DeckView");
             var ui = module.GetType("MDPro3.UI.ServantUI.DeckEditorUI");
             var editor = module.GetType("MDPro3.Servant.DeckEditor");
@@ -151,6 +152,29 @@ namespace MDPro3.Plugins.CodeGen
             foreach (var method in type.Methods) yield return method;
             foreach (var nested in type.NestedTypes)
                 foreach (var method in AllMethods(nested)) yield return method;
+        }
+
+        private static void InstallStoryModel(ModuleDefinition module)
+        {
+            var hooks = module.GetType("MDPro3.Plugins.Features.StoryMode.StoryModelHooks");
+            var behavior = module.GetType("WindBot.Game.GameBehavior");
+            var packet = Method(behavior, "OnPacket", 1);
+            var ai = behavior.Fields.Single(f => f.Name == "_ai" && f.FieldType.FullName == "WindBot.Game.GameAI");
+            var hint = behavior.Fields.Single(f => f.Name == "_select_hint" && f.FieldType.MetadataType == MetadataType.Int32);
+            var last = behavior.Fields.Single(f => f.Name == "_lastMessage" && f.FieldType.FullName == "YGOSharp.OCGWrapper.Enums.GameMessage");
+            // Verify selector fields too: a model action must not inherit a previous fallback's targets.
+            var gameAI = module.GetType("WindBot.Game.GameAI");
+            foreach (string field in new[] { "m_selector", "m_position", "m_attributes", "m_races", "m_selector_pointer", "m_option",
+                "m_yesno", "m_materialSelectorHint", "m_place", "m_announce", "m_number", "m_materialSelector" })
+                if (!gameAI.Fields.Any(f => f.Name == field)) throw new InvalidOperationException("Unsupported WindBot selector: " + field);
+            Prepend(packet, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_0),
+                Instruction.Create(OpCodes.Ldfld, ai), Instruction.Create(OpCodes.Ldarg_1), Instruction.Create(OpCodes.Ldarg_0),
+                Instruction.Create(OpCodes.Ldflda, hint), Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldflda, last),
+                Instruction.Create(OpCodes.Call, Method(hooks, "TryHandle", 5)),
+                Instruction.Create(OpCodes.Brfalse, packet.Body.Instructions[0]), Instruction.Create(OpCodes.Ret) });
+            var installed = Method(hooks, "Installed", 0);
+            installed.Body.Instructions.Clear(); installed.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+            installed.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
         }
 
         private static MethodDefinition Method(TypeDefinition type, string name, int arguments)

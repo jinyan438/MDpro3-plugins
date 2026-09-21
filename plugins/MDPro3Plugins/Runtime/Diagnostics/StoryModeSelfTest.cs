@@ -38,6 +38,14 @@ namespace MDPro3.Plugins.Diagnostics
             if (active && !done) testBot = bot;
         }
 
+        internal static void PrepareTestHand()
+        {
+            if (!active || done || testBot == null) return;
+            // Avoid random repeated ties exhausting the room's opening timer.
+            var behavior = typeof(WindBot.Game.GameClient).GetField("_behavior", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(testBot);
+            if (behavior != null) typeof(WindBot.Game.GameBehavior).GetField("_hand", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(behavior, 2);
+        }
+
         internal static void Tick()
         {
             if (!checkedArgs)
@@ -57,7 +65,7 @@ namespace MDPro3.Plugins.Diagnostics
             if (Time.unscaledTime < next) return;
             // The base client may show release notes after its asynchronous version check.
             // Dismiss that informational modal before inspecting the story canvas.
-            if ((step < 8 || step == 35 || step == 36) && PluginGame.CurrentPopup != null)
+            if ((step < 8 || step == 35 || step == 36 || step == 51) && PluginGame.CurrentPopup != null)
             {
                 PluginGame.CurrentPopup.Hide();
                 next = Time.unscaledTime + .8f;
@@ -65,6 +73,12 @@ namespace MDPro3.Plugins.Diagnostics
             }
             switch (step)
             {
+                case 51:
+                    if (StoryModelSettingsSelfTest.Tick()) Finish(true, "Story model settings: edit, fetch, select, save, masking, errors and cancellation passed.");
+                    break;
+                case 50:
+                    if (StoryModelSelfTest.Tick()) Finish(true, "Story model: private state, live decisions, authoritative settlement, fallback and cancellation passed.");
+                    break;
                 case 0:
                     if (!(PluginGame.CurrentServant is MainMenu menu) || menu.servantUI == null || CharacterSelector.characters == null
                         || CardsManager._cards.Count == 0 || PacksManager.packs.Count == 0) return;
@@ -76,6 +90,8 @@ namespace MDPro3.Plugins.Diagnostics
                     Directory.CreateDirectory(output);
                     feature.Show();
                     Check(feature.Store != null, "story data initialized");
+                    if (Environment.GetCommandLineArgs().Contains("-story-model-settings-only"))
+                    { StoryModelSettingsSelfTest.Begin(); Advance(51, 1); break; }
                     if (Environment.GetCommandLineArgs().Contains("-story-foil-only")
                         || Environment.GetCommandLineArgs().Contains("-story-silver-only"))
                     { StoryRaritySelfTest.BeginFoilPreview(); Advance(35, 3); break; }
@@ -94,6 +110,8 @@ namespace MDPro3.Plugins.Diagnostics
                     // Keep the undersized-deck regression reproducible when reusing an isolated player.
                     setup.player = StoryCatalog.Starter();
                     feature.Store.Commit(setup);
+                    if (Environment.GetCommandLineArgs().Contains("-story-model-only"))
+                    { StoryModelSelfTest.Begin(feature, character); Advance(50, 1); break; }
                     nativeFilesBefore = DeckFiles();
                     UnityEngine.Object.FindFirstObjectByType<StoryOverlay>().RefreshStats();
                     if (Environment.GetCommandLineArgs().Contains("-story-opening-only"))
@@ -284,6 +302,7 @@ namespace MDPro3.Plugins.Diagnostics
                     {
                         if (popup is MDPro3.UI.Popup.PopupRockPaperScissors)
                         {
+                            PrepareTestHand();
                             var paper = popup.GetComponentsInChildren<Button>().FirstOrDefault(b => b.name == "PaperButton");
                             if (paper != null) { lastPopup = popup; paper.onClick.Invoke(); }
                         }

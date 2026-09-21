@@ -1,0 +1,21 @@
+{
+  "enabled": false,
+  "ygoAiRoot": "../ygo-ai",
+  "nodePath": "node",
+  "baseUrl": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "apiKeyEnv": "STORY_AI_API_KEY",
+  "apiKeyFile": "story-ai.secret.local",
+  "allowAnonymousLocal": false,
+  "jsonMode": false,
+  "thinkingMode": "adaptive",
+  "strategyTimeoutMs": 6000,
+  "strategyTokens": 1536,
+  "timeoutMs": 12000,
+  "allowLocalFallback": true,
+  "maxTokens": 768,
+  "maxModelCalls": 300,
+  "maxFailures": 3,
+  "cooldownMs": 30000,
+  "maxPromptChars": 90000
+}

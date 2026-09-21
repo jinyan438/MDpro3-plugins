@@ -14,7 +14,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal static bool Available => Packets != null;
 
         // Run before Program.OnApplicationQuit persists ordinary game preferences.
-        private void OnApplicationQuit() { Owner?.RestoreAppearance(); }
+        private void OnApplicationQuit() { Owner?.StopModel(); Owner?.RestoreAppearance(); }
 
         private void Update()
         {

@@ -17,6 +17,8 @@ foreach ($assembly in @('mscorlib.dll', 'System.dll', 'System.Core.dll', 'Facade
 $arguments += '/reference:' + $json
 $arguments += Join-Path $pluginRoot 'MDPro3Plugins/Runtime/Features/StoryMode/StoryProgress.cs'
 $arguments += Join-Path $pluginRoot 'MDPro3Plugins/Runtime/Features/StoryMode/StoryDuelPackets.cs'
+$arguments += Join-Path $pluginRoot 'MDPro3Plugins/Runtime/Features/StoryMode/StoryModelConfig.cs'
+$arguments += Join-Path $PSScriptRoot 'tests/StoryModelConfigTests.cs'
 $arguments += Join-Path $PSScriptRoot 'tests/StoryModeTests.cs'
 & (Join-Path $UnityEditor 'Data/NetCoreRuntime/dotnet.exe') (Join-Path $UnityEditor 'Data/DotNetSdkRoslyn/csc.dll') @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }

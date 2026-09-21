@@ -7,8 +7,12 @@ namespace MDPro3.Plugins.Features.StoryMode
     [Deck("MDPro3Story", "MDPro3Story", "Test")]
     public sealed class StoryExecutor : StoryLuckyExecutor
     {
+        internal StoryModelSession ModelSession { get; }
+        internal byte[] PendingModelPacket;
+        internal int PendingModelHint;
         public StoryExecutor(GameAI ai, WindBot.Game.Duel duel) : base(ai, duel)
         {
+            ModelSession = StoryModelHooks.LaunchSession;
             Diagnostics.StoryModeSelfTest.AttachBot(ai.Game);
         }
     }

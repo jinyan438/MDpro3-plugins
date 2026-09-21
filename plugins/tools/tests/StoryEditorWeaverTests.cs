@@ -54,6 +54,11 @@ internal static class StoryEditorWeaverTests
                 && r.DeclaringType.Name == "StoryDeckEditorHooks" && r.Name == "ShowRoomChat") == 1,
                 "story-aware room chat hook inserted");
             Check(!StoryEditorWeaver.Apply(patched.MainModule), "weaving is idempotent");
+            var onPacket = patched.MainModule.GetType("WindBot.Game.GameBehavior").Methods.Single(m => m.Name == "OnPacket");
+            Check(onPacket.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryModelHooks" && r.Name == "TryHandle") == 1, "story model packet hook inserted exactly once");
+            var installed = patched.MainModule.GetType("MDPro3.Plugins.Features.StoryMode.StoryModelHooks").Methods.Single(m => m.Name == "Installed");
+            Check(installed.Body.Instructions.Any(i => i.OpCode == OpCodes.Ldc_I4_1), "story model hook marker");
         }
         File.WriteAllBytes(args[1], result.InMemoryAssembly.PeData);
         if (result.InMemoryAssembly.PdbData.Length > 0) File.WriteAllBytes(Path.ChangeExtension(args[1], ".pdb"), result.InMemoryAssembly.PdbData);

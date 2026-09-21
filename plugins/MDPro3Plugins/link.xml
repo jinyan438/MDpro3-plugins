@@ -14,6 +14,9 @@
     <type fullname="MDPro3.Plugins.Features.StoryMode.StoryDeck" preserve="all" />
     <type fullname="MDPro3.Plugins.Features.StoryMode.StoryRules" preserve="all" />
     <type fullname="MDPro3.Plugins.Features.StoryMode.StoryExecutor" preserve="all" />
+    <!-- Queued local target selectors are reset when a model chooses a new action. -->
+    <type fullname="WindBot.Game.GameAI" preserve="fields" />
+    <type fullname="MDPro3.UI.ChatPanel" preserve="fields" />
     <!-- Invoked from the editor's story submenu through reflection. -->
     <type fullname="MDPro3.UI.ServantUI.DeckEditorUI">
       <method name="OnHandTestSettings" />

@@ -214,5 +214,6 @@ internal static class StoryModeTests
         File.WriteAllText(store.SavePath, "{}"); File.WriteAllText(store.SavePath + ".bak", "{}");
         Reject(() => new StoryStore(store.DirectoryPath).Load(Starter), "both bad copies preserved, no new profile");
         Console.WriteLine("StoryMode tests: PASS (" + checks + " checks)");
+        StoryModelConfigTests.Run(root);
     }
 }

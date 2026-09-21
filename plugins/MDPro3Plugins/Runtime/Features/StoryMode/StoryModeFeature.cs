@@ -41,6 +41,8 @@ namespace MDPro3.Plugins.Features.StoryMode
         private string savedCharacter, savedName;
         private Servant.Servant savedReturn;
         private bool ownsServer;
+        internal StoryModelSession ModelSession { get; private set; }
+        internal StoryModelChat ModelChat { get; } = new StoryModelChat();
         private bool savedFromSolo, savedFromHost, savedFromHand;
         private readonly System.Random random = new System.Random();
         internal bool Launching => duel != null && !enteredDuel;
@@ -60,6 +62,7 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         public override void Disable()
         {
+            StopModel();
             PluginEvents.ServantChanged -= OnServantChanged;
             if (shop != null) shop.Close();
             if (overlay != null) overlay.Close();
@@ -88,6 +91,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 if (reopen && duel == null) { reopen = false; Show(); }
             }
             if (duel == null) return;
+            ModelChat.Tick(ModelSession);
 
             // Settle from the live server's WIN packet only, never from replay or UI result flags.
             if (duel.Finished && !settled && Time.unscaledTime >= nextSaveAttempt)
@@ -286,6 +290,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                     "Dialog=" + Path.GetFullPath(dialog), "Host=127.0.0.1", "Port=" + number, "Chat=false" };
                 duel = new StoryDuelPackets();
                 duelId = Guid.NewGuid().ToString("N"); opponentId = character; opponentLevel = level; port = number.ToString();
+                ModelSession = new StoryModelSession(Path.GetDirectoryName(Store.DirectoryPath), duelId);
                 connection = null; deckSent = startSent = enteredDuel = settled = settlementErrorShown = false; error = null;
                 launchTime = Time.unscaledTime; nextSaveAttempt = 0;
                 savedCharacter = Config.Get("DuelCharacter1", "0001");
@@ -297,10 +302,17 @@ namespace MDPro3.Plugins.Features.StoryMode
                 RoomServant.FromHandTest = false; RoomServant.SoloLockHand = false;
                 SoloSelector.port = port;
                 // Unlimited banlist; local validation enforces sizes, sections and max three copies.
-                YgoServer.StartServer(port + " -1 5 0 F T F 8000 5 1 0 0");
+                YgoServer.StartServer(port + " -1 5 0 F T " + (Diagnostics.StoryModelSelfTest.FixedOpening ? "T" : "F") + " 8000 5 1 0 0");
                 ownsServer = true;
+                var modelSession = ModelSession;
                 if (!TcpHelper.LinkStart("127.0.0.1", Config.Get("DuelPlayerName0", "Player"), port, "", true,
-                    () => new System.Threading.Thread(() => WindBot.Program.Main(args)) { IsBackground = true }.Start()))
+                    () => new System.Threading.Thread(() =>
+                    {
+                        if (modelSession.Stopped) return;
+                        StoryModelHooks.LaunchSession = modelSession;
+                        try { WindBot.Program.Main(args); }
+                        finally { StoryModelHooks.LaunchSession = null; modelSession.Dispose(); }
+                    }) { IsBackground = true }.Start()))
                     throw new InvalidOperationException("本地连接未能启动。");
                 overlay.ShowConnecting(name, level);
             }
@@ -321,6 +333,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal void Observe(byte[] packet)
         {
             duel?.Observe(packet);
+            Diagnostics.StoryModelSelfTest.Observe(packet);
             if (duel != null && !duel.Started && packet.Length > 1 && packet[0] == 2)
                 error = "本体拒绝了对战设置或卡组，请检查卡片是否支持当前规则。";
         }
@@ -338,6 +351,7 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         private void EndSession()
         {
+            StopModel();
             if (ownsServer && YgoServer.ServerRunning()) YgoServer.StopServer();
             ownsServer = false;
             RestoreAppearance();
@@ -354,6 +368,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (Program.instance != null) Program.instance.ocgcore.returnServant = savedReturn;
             RoomServant.FromSolo = savedFromSolo; RoomServant.FromLocalHost = savedFromHost; RoomServant.FromHandTest = savedFromHand;
             savedCharacter = savedName = null;
+        }
+
+        internal void StopModel()
+        {
+            ModelSession?.Dispose(); ModelSession = null;
+            ModelChat.Clear();
         }
 
         private static Deck ToGameDeck(StoryDeck deck) => new Deck

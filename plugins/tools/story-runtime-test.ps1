@@ -3,6 +3,9 @@ param(
     [switch]$SkipCompile,
     [switch]$VisualOnly,
     [switch]$OpeningOnly,
+    [switch]$ModelOnly,
+    [switch]$ModelSettingsOnly,
+    [switch]$RealModel,
     [Alias('SilverOnly')][switch]$FoilOnly,
     [int]$Width = 1600,
     [int]$Height = 900,
@@ -20,6 +23,16 @@ if (!$playerRoot.Replace('\', '/').EndsWith('/plugins/.selfcheck/story/player'))
     throw 'PlayerRoot must be the isolated plugins/.selfcheck/story/player directory.'
 }
 $managed = Join-Path $playerRoot 'MDPro3_Data/Managed'
+if ($ModelOnly -or $ModelSettingsOnly) {
+    # The reused player predates this feature and its framework was stripped of
+    # Process/Stopwatch APIs. Use the same Unity version's complete Mono runtime
+    # only in this isolated test copy. Normal builds link the new references.
+    $framework = Join-Path $UnityEditor 'Data/MonoBleedingEdge/lib/mono/unityjit-win32'
+    foreach ($file in Get-ChildItem -LiteralPath $managed -Filter '*.dll') {
+        $runtime = Join-Path $framework $file.Name
+        if (Test-Path -LiteralPath $runtime) { Copy-Item -LiteralPath $runtime -Destination $file.FullName }
+    }
+}
 $iconRelative = 'MDPro3Plugins/Resources/MDPro3Plugins/StoryMode/Icon_Rarity_SR.png'
 $iconTarget = Join-Path (Join-Path $playerRoot 'plugins') $iconRelative
 New-Item -ItemType Directory -Path (Split-Path -Parent $iconTarget) -Force | Out-Null
@@ -47,6 +60,9 @@ $launchArgs = @(
 if ($VisualOnly) { $launchArgs += '-story-visual-only' }
 if ($OpeningOnly) { $launchArgs += '-story-opening-only' }
 if ($FoilOnly) { $launchArgs += '-story-foil-only' }
+if ($ModelOnly) { $launchArgs += '-story-model-only' }
+if ($ModelSettingsOnly) { $launchArgs += '-story-model-settings-only' }
+if ($RealModel) { $launchArgs += '-story-real-model' }
 $process = Start-Process -FilePath (Join-Path $playerRoot 'MDPro3.exe') -WorkingDirectory $playerRoot -WindowStyle Hidden -PassThru -ArgumentList $launchArgs
 Write-Output ('Isolated test process: ' + $process.Id)
 if (!$process.WaitForExit(270000)) {
