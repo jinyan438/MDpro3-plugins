@@ -59,6 +59,11 @@ internal static class StoryEditorWeaverTests
                 && r.DeclaringType.Name == "StoryModelHooks" && r.Name == "TryHandle") == 1, "story model packet hook inserted exactly once");
             var installed = patched.MainModule.GetType("MDPro3.Plugins.Features.StoryMode.StoryModelHooks").Methods.Single(m => m.Name == "Installed");
             Check(installed.Body.Instructions.Any(i => i.OpCode == OpCodes.Ldc_I4_1), "story model hook marker");
+            var tribute = patched.MainModule.GetType("WindBot.Game.GameAI").Methods.Single(m => m.Name == "OnSelectTribute");
+            Check(tribute.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "UsesStory") == 1, "tribute hook is scoped to story executors");
+            Check(tribute.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "SelectTribute") == 1, "story tribute selection is installed once");
         }
         File.WriteAllBytes(args[1], result.InMemoryAssembly.PeData);
         if (result.InMemoryAssembly.PdbData.Length > 0) File.WriteAllBytes(Path.ChangeExtension(args[1], ".pdb"), result.InMemoryAssembly.PdbData);

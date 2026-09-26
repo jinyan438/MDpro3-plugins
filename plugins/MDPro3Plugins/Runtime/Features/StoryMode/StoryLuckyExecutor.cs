@@ -1,52 +1,45 @@
-using System.Collections.Generic;
-using System.Linq;
 using WindBot.Game;
 using WindBot.Game.AI;
-using YGOSharp.OCGWrapper.Enums;
-using WindBotProgram = WindBot.Program;
 
 namespace MDPro3.Plugins.Features.StoryMode
 {
-    // Local story-mode copy of WindBot's P2 custom-deck (Lucky) strategy.
+    // Plugin-owned deterministic strategy for arbitrary story decks.
     // Keep this independent so story AI behavior can be changed without modifying the base game.
-    public abstract class StoryLuckyExecutor : DefaultExecutor
+    public abstract partial class StoryLuckyExecutor : DefaultExecutor
     {
         protected StoryLuckyExecutor(GameAI ai, WindBot.Game.Duel duel) : base(ai, duel)
         {
-            AddExecutor(ExecutorType.Activate, ImFeelingLucky);
-            AddExecutor(ExecutorType.SpSummon, ImFeelingLucky);
+            evaluation = new StoryAiEvaluation(duel, ai.Game?.DeckFile);
+            // Phase transitions and generic setting from DefaultExecutor must not preempt planning.
+            for (int i = Executors.Count - 1; i >= 0; i--)
+                if (Executors[i].CardId == -1) Executors.RemoveAt(i);
 
-            AddExecutor(ExecutorType.SpSummon, ImFeelingUnlucky);
-            AddExecutor(ExecutorType.Activate, ImFeelingUnlucky);
-
-            AddExecutor(ExecutorType.SummonOrSet, ImFeelingLazy);
-            AddExecutor(ExecutorType.SpellSet, DefaultSpellSet);
-            AddExecutor(ExecutorType.Repos, DefaultMonsterRepos);
+            AddExecutor(ExecutorType.GoToBattlePhase, StoryEvenlyBattle);
 
             AddExecutor(ExecutorType.Activate, _CardId.MysticalSpaceTyphoon, DefaultMysticalSpaceTyphoon);
             AddExecutor(ExecutorType.Activate, _CardId.CosmicCyclone, DefaultCosmicCyclone);
             AddExecutor(ExecutorType.Activate, _CardId.GalaxyCyclone, DefaultGalaxyCyclone);
-            AddExecutor(ExecutorType.Activate, _CardId.BookOfMoon, DefaultBookOfMoon);
+            AddExecutor(ExecutorType.Activate, _CardId.BookOfMoon, StoryBookOfMoon);
             AddExecutor(ExecutorType.Activate, _CardId.CompulsoryEvacuationDevice, DefaultCompulsoryEvacuationDevice);
             AddExecutor(ExecutorType.Activate, _CardId.CallOfTheHaunted, DefaultCallOfTheHaunted);
             AddExecutor(ExecutorType.Activate, _CardId.Scapegoat, DefaultScapegoat);
             AddExecutor(ExecutorType.Activate, _CardId.MaxxC, DefaultMaxxC);
-            AddExecutor(ExecutorType.Activate, _CardId.AshBlossom, DefaultAshBlossomAndJoyousSpring);
+            AddExecutor(ExecutorType.Activate, _CardId.AshBlossom, StoryAshBlossom);
             AddExecutor(ExecutorType.Activate, _CardId.GhostOgreAndSnowRabbit, DefaultGhostOgreAndSnowRabbit);
             AddExecutor(ExecutorType.Activate, _CardId.GhostBelle, DefaultGhostBelleAndHauntedMansion);
-            AddExecutor(ExecutorType.Activate, _CardId.EffectVeiler, DefaultEffectVeiler);
-            AddExecutor(ExecutorType.Activate, _CardId.CalledByTheGrave, DefaultCalledByTheGrave);
-            AddExecutor(ExecutorType.Activate, _CardId.InfiniteImpermanence, DefaultInfiniteImpermanence);
-            AddExecutor(ExecutorType.Activate, _CardId.BreakthroughSkill, DefaultBreakthroughSkill);
+            AddExecutor(ExecutorType.Activate, _CardId.EffectVeiler, StoryDisableMonster);
+            AddExecutor(ExecutorType.Activate, _CardId.CalledByTheGrave, StoryCalledByTheGrave);
+            AddExecutor(ExecutorType.Activate, _CardId.InfiniteImpermanence, StoryDisableMonster);
+            AddExecutor(ExecutorType.Activate, _CardId.BreakthroughSkill, StoryDisableMonster);
             AddExecutor(ExecutorType.Activate, _CardId.SolemnJudgment, DefaultSolemnJudgment);
             AddExecutor(ExecutorType.Activate, _CardId.SolemnWarning, DefaultSolemnWarning);
             AddExecutor(ExecutorType.Activate, _CardId.SolemnStrike, DefaultSolemnStrike);
-            AddExecutor(ExecutorType.Activate, _CardId.TorrentialTribute, DefaultTorrentialTribute);
+            AddExecutor(ExecutorType.Activate, _CardId.TorrentialTribute, StoryTorrentialTribute);
             AddExecutor(ExecutorType.Activate, _CardId.HeavyStorm, DefaultHeavyStorm);
-            AddExecutor(ExecutorType.Activate, _CardId.HarpiesFeatherDuster, DefaultHarpiesFeatherDusterFirst);
+            AddExecutor(ExecutorType.Activate, _CardId.HarpiesFeatherDuster, StoryFeatherDuster);
             AddExecutor(ExecutorType.Activate, _CardId.HammerShot, DefaultHammerShot);
-            AddExecutor(ExecutorType.Activate, _CardId.DarkHole, DefaultDarkHole);
-            AddExecutor(ExecutorType.Activate, _CardId.Raigeki, DefaultRaigeki);
+            AddExecutor(ExecutorType.Activate, _CardId.DarkHole, StoryDarkHole);
+            AddExecutor(ExecutorType.Activate, _CardId.Raigeki, StoryRaigeki);
             AddExecutor(ExecutorType.Activate, _CardId.SmashingGround, DefaultSmashingGround);
             AddExecutor(ExecutorType.Activate, _CardId.PotOfDesires, DefaultPotOfDesires);
             AddExecutor(ExecutorType.Activate, _CardId.AllureofDarkness, DefaultAllureofDarkness);
@@ -62,7 +55,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             AddExecutor(ExecutorType.SpSummon, _CardId.DogorantheMadFlameKaiju, DefaultKaijuSpsummon);
             AddExecutor(ExecutorType.SpSummon, _CardId.SuperAntiKaijuWarMachineMechaDogoran, DefaultKaijuSpsummon);
 
-            AddExecutor(ExecutorType.SpSummon, _CardId.EvilswarmExcitonKnight, DefaultEvilswarmExcitonKnightSummon);
+            AddExecutor(ExecutorType.SpSummon, _CardId.EvilswarmExcitonKnight, StoryExcitonSummon);
             AddExecutor(ExecutorType.Activate, _CardId.EvilswarmExcitonKnight, DefaultEvilswarmExcitonKnightEffect);
 
             AddExecutor(ExecutorType.Summon, _CardId.SandaionTheTimelord, DefaultTimelordSummon);
@@ -81,157 +74,9 @@ namespace MDPro3.Plugins.Features.StoryMode
             AddExecutor(ExecutorType.Summon, _CardId.LeftLegofTheForbiddenOne, JustDontIt);
             AddExecutor(ExecutorType.Summon, _CardId.RightArmofTheForbiddenOne, JustDontIt);
             AddExecutor(ExecutorType.Summon, _CardId.ExodiaTheForbiddenOne, JustDontIt);
+
+            RegisterStoryPolicy();
         }
 
-        private readonly List<int> hintMsgForEnemy = new List<int>
-        {
-            HintMsg.Release, HintMsg.Destroy, HintMsg.Remove, HintMsg.ToGrave, HintMsg.ReturnToHand, HintMsg.ToDeck,
-            HintMsg.FusionMaterial, HintMsg.SynchroMaterial, HintMsg.XyzMaterial, HintMsg.LinkMaterial, HintMsg.Disable
-        };
-
-        private readonly List<int> hintMsgForDeck = new List<int>
-        {
-            HintMsg.SpSummon, HintMsg.ToGrave, HintMsg.Remove, HintMsg.AddToHand, HintMsg.FusionMaterial
-        };
-
-        private readonly List<int> hintMsgForSelf = new List<int>
-        {
-            HintMsg.Equip
-        };
-
-        private readonly List<int> hintMsgForMaterial = new List<int>
-        {
-            HintMsg.FusionMaterial, HintMsg.SynchroMaterial, HintMsg.XyzMaterial, HintMsg.LinkMaterial, HintMsg.Release
-        };
-
-        private readonly List<int> hintMsgForMaxSelect = new List<int>
-        {
-            HintMsg.SpSummon, HintMsg.ToGrave, HintMsg.AddToHand, HintMsg.FusionMaterial, HintMsg.Destroy
-        };
-
-        public override IList<ClientCard> OnSelectCard(
-            IList<ClientCard> offeredCards, int min, int max, int hint, bool cancelable)
-        {
-            if (Duel.Phase == DuelPhase.BattleStart)
-                return null;
-            if (AI.HaveSelectedCards())
-                return null;
-
-            IList<ClientCard> selected = new List<ClientCard>();
-            IList<ClientCard> cards = new List<ClientCard>(offeredCards);
-            if (max > cards.Count)
-                max = cards.Count;
-
-            if (hintMsgForEnemy.Contains(hint))
-            {
-                IList<ClientCard> enemyCards = cards.Where(card => card.Controller == 1).ToList();
-                while (enemyCards.Count > 0 && selected.Count < max)
-                {
-                    ClientCard card = enemyCards[WindBotProgram.Rand.Next(enemyCards.Count)];
-                    selected.Add(card);
-                    enemyCards.Remove(card);
-                    cards.Remove(card);
-                }
-            }
-
-            if (hintMsgForDeck.Contains(hint))
-            {
-                IList<ClientCard> deckCards = cards.Where(card => card.Location == CardLocation.Deck).ToList();
-                while (deckCards.Count > 0 && selected.Count < max)
-                {
-                    ClientCard card = deckCards[WindBotProgram.Rand.Next(deckCards.Count)];
-                    selected.Add(card);
-                    deckCards.Remove(card);
-                    cards.Remove(card);
-                }
-            }
-
-            if (hintMsgForSelf.Contains(hint))
-            {
-                IList<ClientCard> botCards = cards.Where(card => card.Controller == 0).ToList();
-                while (botCards.Count > 0 && selected.Count < max)
-                {
-                    ClientCard card = botCards[WindBotProgram.Rand.Next(botCards.Count)];
-                    selected.Add(card);
-                    botCards.Remove(card);
-                    cards.Remove(card);
-                }
-            }
-
-            if (hintMsgForMaterial.Contains(hint))
-            {
-                IList<ClientCard> materials = cards.OrderBy(card => card.Attack).ToList();
-                while (materials.Count > 0 && selected.Count < min)
-                {
-                    ClientCard card = materials[0];
-                    selected.Add(card);
-                    materials.Remove(card);
-                    cards.Remove(card);
-                }
-            }
-
-            while (selected.Count < min)
-            {
-                ClientCard card = cards[WindBotProgram.Rand.Next(cards.Count)];
-                selected.Add(card);
-                cards.Remove(card);
-            }
-
-            if (hintMsgForMaxSelect.Contains(hint))
-            {
-                while (selected.Count < max)
-                {
-                    ClientCard card = cards[WindBotProgram.Rand.Next(cards.Count)];
-                    selected.Add(card);
-                    cards.Remove(card);
-                }
-            }
-
-            return selected;
-        }
-
-        public override int OnSelectOption(IList<int> options)
-        {
-            return WindBotProgram.Rand.Next(options.Count);
-        }
-
-        public override CardPosition OnSelectPosition(int cardId, IList<CardPosition> positions)
-        {
-            var cardData = YGOSharp.OCGWrapper.NamedCard.Get(cardId);
-            if (cardData != null)
-            {
-                if (cardData.Attack < 0)
-                    return CardPosition.FaceUpAttack;
-                if (cardData.Attack <= 1000)
-                    return CardPosition.FaceUpDefence;
-            }
-            return 0;
-        }
-
-        private bool ImFeelingLucky()
-        {
-            if (Type == ExecutorType.Activate && DefaultCheckWhetherCardIsNegated(Card)) return false;
-            return WindBotProgram.Rand.Next(10) >= 5 && DefaultDontChainMyself();
-        }
-
-        private bool ImFeelingUnlucky()
-        {
-            if (Type == ExecutorType.Activate && DefaultCheckWhetherCardIsNegated(Card)) return false;
-            return DefaultDontChainMyself();
-        }
-
-        private bool ImFeelingLazy()
-        {
-            if (Executors.Any(exec => (exec.Type == ExecutorType.SummonOrSet
-                || exec.Type == ExecutorType.Summon || exec.Type == ExecutorType.MonsterSet)
-                && exec.CardId == Card.Id))
-                return false;
-            return DefaultMonsterSummon();
-        }
-
-        private bool JustDontIt()
-        {
-            return false;
-        }
     }
 }

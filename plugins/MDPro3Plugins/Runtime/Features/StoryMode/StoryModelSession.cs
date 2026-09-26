@@ -115,8 +115,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             try
             {
                 status = "故事 AI：正在决策";
-                Send(new JObject { ["type"] = "decision", ["version"] = 1, ["session"] = id, ["step"] = current,
-                    ["packet"] = Convert.ToBase64String(packet), ["state"] = state, ["hint"] = hint });
+                SendDecision(current, packet, state, hint);
                 var timer = Stopwatch.StartNew(); bool cardsSent = false;
                 while (!stopped)
                 {
@@ -167,6 +166,14 @@ namespace MDPro3.Plugins.Features.StoryMode
                     if ((string)message["status"] != "ok")
                     {
                         string reason = (string)message["reason"];
+                        if ((string)message["status"] == "retry" && reason == "invalid_model_json")
+                        {
+                            status = "故事 AI：模型未返回有效 JSON，正在重试（请求 " + modelCalls + "）";
+                            Publish(status);
+                            current = ++step; cardsSent = false; timer.Restart();
+                            SendDecision(current, packet, state, hint);
+                            continue;
+                        }
                         if (reason == "http_401" || reason == "http_402" || reason == "http_403") modelDisabled = true;
                         if (AllowLocalFallback)
                         {
@@ -209,6 +216,12 @@ namespace MDPro3.Plugins.Features.StoryMode
                 Publish(status); Dispose();
             }
             return null;
+        }
+
+        private void SendDecision(int current, byte[] packet, JObject state, int hint)
+        {
+            Send(new JObject { ["type"] = "decision", ["version"] = 1, ["session"] = id, ["step"] = current,
+                ["packet"] = Convert.ToBase64String(packet), ["state"] = state, ["hint"] = hint });
         }
 
         private void Unavailable(string reason)

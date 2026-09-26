@@ -62,9 +62,16 @@ namespace MDPro3.Plugins.CodeGen
             var marker = Method(hooks, "Installed", 0);
             if (marker.Body.Instructions.Any(i => i.OpCode == OpCodes.Ldc_I4_1)) return false;
             InstallStoryModel(module);
+            var localAi = module.GetType("MDPro3.Plugins.Features.StoryMode.StoryLocalAiHooks");
+            Override(Method(module.GetType("WindBot.Game.GameAI"), "OnSelectTribute", 5),
+                Method(localAi, "UsesStory", 1), Method(localAi, "SelectTribute", 6));
             var view = module.GetType("MDPro3.UI.DeckView");
             var ui = module.GetType("MDPro3.UI.ServantUI.DeckEditorUI");
             var editor = module.GetType("MDPro3.Servant.DeckEditor");
+            Handle(Method(module.GetType("MDPro3.UI.SelectionToggle_Deck"), "OnClick", 0),
+                Method(hooks, "SelectLocalDeck", 1));
+            Handle(Method(module.GetType("MDPro3.UI.SelectionToggle_DeckOnline"), "OnClick", 0),
+                Method(hooks, "SelectOnlineDeck", 1));
 
             // bool native methods: use story implementation only for the active story DeckView.
             Override(Method(view, "CanAddCard", 2), Method(hooks, "UsesView", 1), Method(hooks, "CanAdd", 3));

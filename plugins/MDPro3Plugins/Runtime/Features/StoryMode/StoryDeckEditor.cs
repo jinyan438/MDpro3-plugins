@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using MDPro3.Duel.YGOSharp;
+using MDPro3.Net;
 using MDPro3.Servant;
 using MDPro3.UI;
 using MDPro3.UI.ServantUI;
@@ -22,7 +24,11 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal readonly Banlist Banlist = new Banlist { Name = "故事模式" };
         internal DeckEditorUI UI;
         internal bool HandTestStarted;
+        internal bool SelectingDeckSource;
         internal readonly StoryRarityEditor Rarities;
+        private bool deckSourcePickerEntered;
+        private bool deckSourceDraftDirty;
+        private int onlineDeckLoadGeneration;
         private readonly Deck previousDeck;
         private readonly string previousName, previousOnlineId, previousPack;
         private readonly bool previousLocal;
@@ -32,6 +38,8 @@ namespace MDPro3.Plugins.Features.StoryMode
         private readonly CardCollectionView.SortOrder previousSort;
         private readonly Servant.Servant previousReturn;
         private readonly Action previousReturnAction;
+        private readonly Servant.Servant previousSelectorReturn;
+        private readonly DeckSelector.Condition previousSelectorCondition;
         private readonly bool previousFromHand, previousFromSolo, previousFromHost;
         private bool entered;
         private bool initialized;
@@ -47,6 +55,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             previousSort = CardCollectionView._SortOrder;
             previousReturn = Program.instance.deckEditor.returnServant;
             previousReturnAction = Program.instance.deckEditor.returnAction;
+            previousSelectorReturn = Program.instance.deckSelector.returnServant;
+            previousSelectorCondition = DeckSelector.condition;
             previousFromHand = RoomServant.FromHandTest; previousFromSolo = RoomServant.FromSolo;
             previousFromHost = RoomServant.FromLocalHost;
         }
@@ -77,12 +87,25 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (PluginGame.CurrentServant == Program.instance.deckEditor)
             {
                 entered = true;
+                if (deckSourcePickerEntered)
+                {
+                    SelectingDeckSource = false;
+                    deckSourcePickerEntered = false;
+                    deckSourceDraftDirty = false;
+                    onlineDeckLoadGeneration++;
+                }
                 if (!initialized && UI != null && UI.DeckView.deckLoaded)
                 {
                     initialized = true;
                     UI.CardCollectionView.PrintSearchCards();
                     if (UI.DeckView.cards.Count > 0) UI.ShowDetail(UI.DeckView.cards[0].Card);
                 }
+                return;
+            }
+            if (SelectingDeckSource && (PluginGame.CurrentServant == Program.instance.deckSelector
+                || PluginGame.CurrentServant == Program.instance.onlineDeckViewer))
+            {
+                deckSourcePickerEntered = true;
                 return;
             }
             if (!entered) return;
@@ -106,6 +129,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             CardCollectionView._SortOrder = previousSort;
             Program.instance.deckEditor.returnServant = previousReturn;
             Program.instance.deckEditor.returnAction = previousReturnAction;
+            Program.instance.deckSelector.returnServant = previousSelectorReturn;
+            DeckSelector.condition = previousSelectorCondition;
             RoomServant.FromHandTest = previousFromHand; RoomServant.FromSolo = previousFromSolo;
             RoomServant.FromLocalHost = previousFromHost;
         }
@@ -138,6 +163,113 @@ namespace MDPro3.Plugins.Features.StoryMode
             MessageManager.Toast(invalid); return false;
         }
 
+        internal void OpenDeckSelector()
+        {
+            if (Character == null || UI == null || !UI.DeckView.deckLoaded) return;
+            var view = UI.DeckView;
+            deckSourceDraftDirty = view.GetDirty();
+            var currentDraft = view.FromObjectDeckToCodedDeck();
+            if (currentDraft != null) DeckEditor.Deck = currentDraft;
+            UI = null;
+            SelectingDeckSource = true;
+            deckSourcePickerEntered = false;
+            onlineDeckLoadGeneration++;
+            Program.instance.deckSelector.SwitchCondition(DeckSelector.Condition.ForEdit);
+            Program.instance.deckSelector.returnServant = Program.instance.deckEditor;
+            Program.instance.ShiftToServant(Program.instance.deckSelector);
+        }
+
+        internal bool ImportDeck(Deck source)
+        {
+            if (Character == null || DeckEditor.Deck == null || source == null) return false;
+            var draft = new Deck
+            {
+                Main = source.Main == null ? new List<int>() : new List<int>(source.Main),
+                Extra = source.Extra == null ? new List<int>() : new List<int>(source.Extra),
+                Side = source.Side == null ? new List<int>() : new List<int>(source.Side)
+            };
+            if (deckSourceDraftDirty)
+            {
+                UIManager.ShowPopupYesOrNo(new List<string> { "导入卡组", "导入会替换当前未保存的修改，是否继续？", "导入", "取消" },
+                    () => ImportDeckNow(draft), null);
+                return true;
+            }
+            return ImportDeckNow(draft);
+        }
+
+        private bool ImportDeckNow(Deck draft)
+        {
+            if (!AllowedDraft(draft, false)) return false;
+            var story = Rarities.Import(draft);
+            var current = DeckEditor.Deck;
+            current.Main = new List<int>(draft.Main ?? new List<int>());
+            current.Extra = new List<int>(draft.Extra ?? new List<int>());
+            current.Side = new List<int>(draft.Side ?? new List<int>());
+            Rarities.Remember(current, story);
+            MessageManager.Toast("卡组已载入角色卡组草稿；保存后生效。");
+            Program.instance.ShiftToServant(Program.instance.deckEditor);
+            return true;
+        }
+
+        internal void AddDeckFromClipboard()
+        {
+            UIManager.ShowPopupYdke(ImportClipboardDeck, ExportCurrentDeck);
+        }
+
+        private void ImportClipboardDeck()
+        {
+            string clipboard = GUIUtility.systemCopyBuffer ?? string.Empty;
+            Deck deck = null;
+            try
+            {
+                if (clipboard.Contains("#main")) deck = new Deck(clipboard, string.Empty);
+                else if (clipboard.Contains(YdkeConverter.ydkeHeader)) deck = YdkeConverter.Ydke2Deck(clipboard);
+                else if (clipboard.Contains("ygotype=deck&v=1&d=")) deck = DeckShareURL.UriToDeck(new Uri(clipboard));
+            }
+            catch (Exception ex) { PluginLog.Error("storyMode deck import: " + ex); }
+
+            if (deck != null)
+            {
+                ImportDeck(deck);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(clipboard))
+            {
+                UIManager.ShowPopupYesOrNo(new List<string> { "新建空白角色卡组", "是否创建空白草稿？保存前不会写入普通卡组文件。", "创建", "取消" },
+                    () => ImportDeck(new Deck()), null);
+                return;
+            }
+            MessageManager.Cast("剪贴板中没有可导入的 YDK、YDKE 或卡组链接。");
+        }
+
+        private void ExportCurrentDeck()
+        {
+            if (DeckEditor.Deck == null) return;
+            GUIUtility.systemCopyBuffer = YdkeConverter.DeckToYdke(DeckEditor.Deck);
+            MessageManager.Toast("角色卡组码已复制。");
+        }
+
+        internal IEnumerator LoadOnlineDeck(string deckId)
+        {
+            int generation = ++onlineDeckLoadGeneration;
+            var task = OnlineDeck.GetDeck(deckId);
+            yield return new WaitUntil(() => task.IsCompleted);
+            if (generation != onlineDeckLoadGeneration || Active != this || !SelectingDeckSource
+                || PluginGame.CurrentServant != Program.instance.onlineDeckViewer)
+                yield break;
+            if (task.IsFaulted || task.IsCanceled || task.Result == null || string.IsNullOrWhiteSpace(task.Result.deckYdk))
+            {
+                MessageManager.Cast("网络异常，获取在线卡组失败。");
+                yield break;
+            }
+            try { ImportDeck(new Deck(task.Result.deckYdk, string.Empty)); }
+            catch (Exception ex)
+            {
+                MessageManager.Cast("在线卡组数据无法读取。");
+                PluginLog.Error("storyMode online deck import: " + ex);
+            }
+        }
+
         internal static StoryDeck FromGame(Deck deck) => deck != null
             && Active != null && Active.Rarities.Read(deck, out var saved) ? saved.Copy() : PlainDeck(deck);
         internal static StoryDeck PlainDeck(Deck deck) => deck == null ? null : new StoryDeck
@@ -157,6 +289,34 @@ namespace MDPro3.Plugins.Features.StoryMode
         public static bool Installed() => false;
         public static bool Active() => StoryDeckEditor.Active != null;
         public static Banlist GetBanlist() => StoryDeckEditor.Active.Banlist;
+        public static bool SelectLocalDeck(SelectionToggle_Deck item)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session?.SelectingDeckSource != true || session.Character == null) return false;
+            if (item == null) return true;
+            if (item.index == 0)
+            {
+                session.AddDeckFromClipboard();
+                return true;
+            }
+            var selector = Program.instance.deckSelector.GetUI<DeckSelectorUI>();
+            if (selector.decks == null || !selector.decks.TryGetValue(item.deckName, out var deck))
+                MessageManager.Cast("无法读取所选卡组。");
+            else
+                session.ImportDeck(deck);
+            return true;
+        }
+
+        public static bool SelectOnlineDeck(SelectionToggle_DeckOnline item)
+        {
+            var session = StoryDeckEditor.Active;
+            if (session?.SelectingDeckSource != true || session.Character == null) return false;
+            if (item == null || string.IsNullOrWhiteSpace(item.deckId)) return true;
+            MessageManager.Cast("正在读取在线卡组……");
+            Program.instance.onlineDeckViewer.StartCoroutine(session.LoadOnlineDeck(item.deckId));
+            return true;
+        }
+
         public static bool UsesView(DeckView view) => StoryDeckEditor.Active?.Owns(view) == true;
         public static bool UsesPlayerView(DeckView view) => UsesView(view) && StoryDeckEditor.Active.Character == null;
         public static bool BlockFreeRarity(DeckEditorUI ui) => StoryDeckEditor.Active?.Owns(ui) == true && StoryDeckEditor.Active.Character == null;
@@ -383,7 +543,14 @@ namespace MDPro3.Plugins.Features.StoryMode
             var name = ui.DeckView.GetComponent<YgomSystem.ElementSystem.ElementObjectManager>()
                 .GetNestedElement<TMP_InputField>("HeaderArea/InputField");
             name.readOnly = true;
-            ui.DeckView.ButtonDeck.gameObject.SetActive(false);
+            if (session.Character == null)
+                ui.DeckView.ButtonDeck.gameObject.SetActive(false);
+            else
+            {
+                ui.DeckView.ButtonDeck.SetButtonText("选择卡组");
+                ui.DeckView.ButtonDeck.SetClickEvent(session.OpenDeckSelector);
+                ui.DeckView.ButtonDeck.gameObject.SetActive(true);
+            }
             ui.Manager.GetNestedElement("AppearanceGroup").SetActive(false);
             if (session.Character == null)
                 foreach (var toggle in ui.GetComponentsInChildren<SelectionToggle_Rarity>(true)) toggle.gameObject.SetActive(false);
