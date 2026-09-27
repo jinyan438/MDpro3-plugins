@@ -143,6 +143,11 @@ internal static partial class StoryLocalAiTests
         var exodia = Card(id: 33396948, location: CardLocation.Hand);
         Check(!f.Rule(exodia, ExecutorType.Summon) && !f.Rule(exodia, ExecutorType.SummonOrSet), "Exodia summon veto cannot be bypassed");
         Check(!f.Rule(Card(id: 14558127, location: CardLocation.Hand), ExecutorType.SummonOrSet), "hold hand traps on an empty turn-one board");
+        f = new Fixture();
+        var boardThreat = Card(2500, controller: 1);
+        f.Enemy.MonsterZone[0] = boardThreat;
+        Check(!f.Rule(Card(id: 14558127, location: CardLocation.Hand), ExecutorType.SummonOrSet),
+            "hand traps stay in hand even when the opponent has a monster and our board is empty");
 
         f = new Fixture();
         var beatstick = Card(2000, location: CardLocation.Hand, type: CardType.Monster | CardType.Normal);
@@ -151,6 +156,17 @@ internal static partial class StoryLocalAiTests
         Check(!f.Rule(beatstick, ExecutorType.SummonOrSet) && f.Rule(starter, ExecutorType.SummonOrSet), "normal summon prioritizes a starter over raw ATK");
         f.Enemy.MonsterZone[0] = Card(4000, controller: 1);
         Check(!f.Executor.OnSelectMonsterSummonOrSet(starter), "starter is not set just because the opponent is stronger");
+        var attacker = Card(1800, 1000, location: CardLocation.Hand, type: CardType.Monster | CardType.Normal);
+        Check(!f.Executor.OnSelectMonsterSummonOrSet(attacker), "ordinary attacker is summoned face-up against a stronger board");
+        f = new Fixture(); f.Duel.Turn = 1;
+        attacker = Card(1800, 1000, location: CardLocation.Hand, type: CardType.Monster | CardType.Normal);
+        f.Bot.Hand.Add(attacker);
+        f.Duel.MainPhase.SummonableCards.Add(attacker);
+        f.Duel.MainPhase.MonsterSetableCards.Add(attacker);
+        var setTrap = Card(type: CardType.Trap, location: CardLocation.Hand);
+        f.Bot.Hand.Add(setTrap); f.Duel.MainPhase.SpellSetableCards.Add(setTrap);
+        Check(f.AI.OnSelectIdleCmd(f.Duel.MainPhase).Action == MainPhaseAction.MainAction.Summon,
+            "turn-one main phase develops a legal monster before setting the rest of the hand");
         f = new Fixture();
         var highLevel = Card(2500, location: CardLocation.Hand, level: 12, type: CardType.Monster | CardType.Normal);
         f.Bot.MonsterZone[0] = Card(0, type: CardType.Monster | CardType.Token);
@@ -200,6 +216,24 @@ internal static partial class StoryLocalAiTests
         var liveAction = f.AI.OnSelectIdleCmd(f.Duel.MainPhase);
         Check(liveAction.Action == MainPhaseAction.MainAction.Activate && liveAction.Index == 1,
             "a high-scoring spell suppressed by Imperial Order does not starve a live grave extender");
+        foreach (int turn in new[] { 1, 3 })
+        {
+            f = new Fixture(); f.Duel.Turn = turn; f.Duel.LastChainPlayer = 0;
+            var drawSpell = Card(type: CardType.Spell, location: CardLocation.Hand, text: "Draw 2 cards.");
+            f.Bot.Hand.Add(drawSpell); f.Duel.MainPhase.ActivableCards.Add(drawSpell);
+            f.Duel.MainPhase.ActivableDescs.Add(drawSpell.Id * 16);
+            drawSpell.ActionActivateIndex[drawSpell.Id * 16] = 7;
+            for (int i = 0; i < 3; i++)
+            {
+                var trap = Card(type: CardType.Trap, location: CardLocation.Hand);
+                f.Bot.Hand.Add(trap); f.Duel.MainPhase.SpellSetableCards.Add(trap);
+            }
+            liveAction = f.AI.OnSelectIdleCmd(f.Duel.MainPhase);
+            Check(liveAction.Action == MainPhaseAction.MainAction.Activate && liveAction.Index == 7,
+                "an open main phase activates a generic hand spell instead of only setting cards on turn " + turn);
+            f.Chain(Card(type: CardType.Spell, location: CardLocation.SpellZone), 0);
+            Check(!f.Rule(drawSpell, ExecutorType.Activate), "generic spell does not intrude on an unrelated own chain");
+        }
         Console.WriteLine("Local AI: action/chain regressions passed");
     }
 
@@ -232,6 +266,10 @@ internal static partial class StoryLocalAiTests
         Check(f.AI.OnSelectOption(new[] { 100, 101 }) == 1, "generic option callback preserves the queued option");
         var link = Card(type: Monster | CardType.Link);
         Check(f.Executor.OnSelectPosition(link.Id, new[] { CardPosition.FaceUpAttack }) == CardPosition.FaceUpAttack, "never select unavailable defense for a Link");
+        f.Duel.Turn = 1;
+        var openingBoss = Card(3000, 2000, type: Monster | CardType.Fusion);
+        Check(f.AI.OnSelectPosition(openingBoss.Id, new[] { CardPosition.FaceUpDefence, CardPosition.FaceUpAttack }) == CardPosition.FaceUpAttack,
+            "turn-one special summoned attacker uses its higher ATK even without a battle phase");
         var small = Card(0);
         Check(f.Executor.OnSelectPosition(small.Id, new[] { CardPosition.FaceDownDefence }) == CardPosition.FaceDownDefence, "position always belongs to offered positions");
 

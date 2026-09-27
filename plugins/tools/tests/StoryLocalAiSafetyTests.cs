@@ -143,6 +143,45 @@ internal static partial class StoryLocalAiTests
         foreach (var c in f.Bot.GetMonsters()) c.LastLocation = CardLocation.Extra;
         f.Enemy.MonsterZone[0] = Card(3000, controller: 1);
         Check(f.Rule(avramax, ExecutorType.SpSummon), "actual extra-deck summoned materials can build Avramax");
+
+        f = new Fixture();
+        var nova = Real(58069384, CardLocation.Extra);
+        var galaxyOne = Real(46659709); var galaxyTwo = Real(46659709);
+        f.Bot.MonsterZone[0] = galaxyOne; f.Bot.MonsterZone[1] = galaxyTwo;
+        Check(f.Rule(nova, ExecutorType.SpSummon), "generic Xyz parser recognizes race plus level material clauses");
+        var novaMaterials = f.AI.OnSelectCard(new[] { galaxyTwo, galaxyOne }, 2, 2, HintMsg.XyzMaterial, false);
+        Check(novaMaterials.Count == 2 && novaMaterials.All(c => c.Id == 46659709),
+            "the planned Xyz route selects both matching level and race bodies");
+
+        f = new Fixture();
+        var englishXyz = Card(2500, 1600, (CardType)8388641, CardLocation.Extra, 0, text: "2 Level 5 Machine-Type monsters\nWhen the opponent activates a monster effect: negate the activation.", level: 5);
+        Set(englishXyz.Data, "Race", 32); Set(englishXyz, "Race", 32);
+        var machineOne = Card(1000, level: 5); var machineTwo = Card(1000, level: 5);
+        Set(machineOne.Data, "Race", 32); Set(machineOne, "Race", 32);
+        Set(machineTwo.Data, "Race", 32); Set(machineTwo, "Race", 32);
+        f.Bot.MonsterZone[0] = machineOne; f.Bot.MonsterZone[1] = machineTwo;
+        Check(f.Rule(englishXyz, ExecutorType.SpSummon), "English race-level Xyz wording follows the same generic parser");
+
+        f = new Fixture();
+        var premium = Card(3000, text: "If this card is Special Summoned: add 1 card from your Deck to your hand.");
+        var cheap = Card(300);
+        var weakLink = Card(2100, type: Monster | CardType.Link, location: CardLocation.Extra, level: 2,
+            text: "2 Effect Monsters\nIf this card is Link Summoned: add 1 card from your Deck to your hand.");
+        f.Bot.MonsterZone[0] = premium; f.Bot.MonsterZone[1] = cheap;
+        Check(!f.Rule(weakLink, ExecutorType.SpSummon), "generic high attack effect terminals are protected from weak conversions");
+
+        f = new Fixture();
+        var sameName = Card(2200, text: "If this card is Special Summoned: add 1 card from your Deck to your hand.");
+        Set(sameName.Data, "Name", "Fixture Terminal");
+        cheap = Card(300); weakLink = Card(2200, type: Monster | CardType.Link, location: CardLocation.Extra, level: 2,
+            text: "2 Effect Monsters\nIf this card is Link Summoned: add 1 card from your Deck to your hand.");
+        Set(weakLink.Data, "Name", "Fixture Terminal");
+        // Use the same card id as an additional alias check; real duplicate terminals
+        // normally arrive this way even when a localized name is unavailable.
+        Set(sameName, "Id", weakLink.Id);
+        f.Bot.MonsterZone[0] = sameName; f.Bot.MonsterZone[1] = cheap;
+        Check(!f.Rule(weakLink, ExecutorType.SpSummon), "same-name terminal conversions are rejected by the generic duplicate loss rule");
+
         f = new Fixture(); var spider = Card(1000, type: Monster | CardType.Link, level: 1, location: CardLocation.Extra, text: "1 Normal Monster");
         f.Bot.MonsterZone[0] = Card(0, type: CardType.Monster | CardType.Normal | CardType.Token);
         Check(f.Rule(spider, ExecutorType.SpSummon), "a known one-Normal-monster recipe can use a cheap token");

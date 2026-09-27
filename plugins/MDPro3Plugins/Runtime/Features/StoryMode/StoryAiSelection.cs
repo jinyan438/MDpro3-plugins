@@ -54,6 +54,17 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (AI.HaveSelectedCards()) return null;
             var effect = EffectSelection(cards, min, max, hint, cancelable);
             if (effect != null) return effect;
+            if (hint == HintMsg.SpSummon && min == 1 && max == 1 &&
+                cards.All(c => c.Location == CardLocation.Extra && StoryAiEvaluation.Has(c, CardType.Fusion)))
+            {
+                var fusion = cards.Select(evaluation.PlanFusionSelection).Where(p => p != null)
+                    .OrderByDescending(p => p.Gain).FirstOrDefault();
+                if (fusion != null)
+                {
+                    CommitExtraPlan(fusion);
+                    return new List<ClientCard> { fusion.Destination };
+                }
+            }
             if (cancelable && min > 0 && RemovalHint(hint) && cards.All(c => c.Controller == 0 &&
                 (c.Location == CardLocation.MonsterZone || c.Location == CardLocation.SpellZone))) return new List<ClientCard>();
             var potential = new Dictionary<ClientCard, float>();
@@ -91,9 +102,15 @@ namespace MDPro3.Plugins.Features.StoryMode
             var data = NamedCard.Get(cardId);
             if (data == null) return positions[0];
             bool canBattle = Duel.Player == 0 && Duel.Turn > 1 && Duel.Phase < DuelPhase.Main2;
+            // A first-turn summon cannot enter Battle Phase, but putting a large
+            // attacker in defense still throws away its pressure and can make the
+            // opening board look as if the AI never acted. Prefer attack whenever the
+            // card's printed ATK is greater than its DEF; later battle usefulness can
+            // still select attack for cards with a defensive stat line.
+            bool attackStatAdvantage = data.Attack > data.Defense && data.Attack > 0;
             bool usefulAttack = canBattle && data.Attack > 0 && (Enemy.GetMonsterCount() == 0 ||
                 Enemy.GetMonsters().Any(c => !StoryAiEvaluation.Hidden(c) && data.Attack > c.GetDefensePower()));
-            CardPosition desired = usefulAttack || data.HasType(CardType.Link) || data.Attack < 0
+            CardPosition desired = attackStatAdvantage || usefulAttack || data.HasType(CardType.Link) || data.Attack < 0
                 ? CardPosition.FaceUpAttack : CardPosition.FaceUpDefence;
             if (positions.Contains(desired)) return desired;
             if (positions.Contains(CardPosition.FaceUpAttack)) return CardPosition.FaceUpAttack;

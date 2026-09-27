@@ -207,7 +207,12 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (HasSpecific(ExecutorType.Activate, candidate) || DefaultCheckWhetherCardIsNegated(candidate) || !base.OnPreActivate(candidate)) return false;
             if (!EffectAllowed(candidate, description, out _)) return false;
-            if (Duel.LastChainPlayer == 0 && candidate.Location != CardLocation.Grave && candidate.Location != CardLocation.Removed &&
+            // At an open Main Phase, a generic card from the hand is a legal action in
+            // its own right.  The old check treated LastChainPlayer's default value (0)
+            // as an active own chain and rejected every unregistered hand spell, so a
+            // story deck could set its traps once and then end every later turn.  Keep
+            // the stale-candidate guard while a real chain is resolving.
+            if (Duel.LastChainPlayer == 0 && Duel.CurrentChain.Count > 0 && candidate.Location != CardLocation.Grave && candidate.Location != CardLocation.Removed &&
                 !Duel.ChainTargets.Contains(candidate) && !Duel.LastSummonedCards.Contains(candidate)) return false;
             if (StoryAiEvaluation.Has(candidate, CardType.Field) && candidate.Location == CardLocation.Hand && Bot.SpellZone[5] != null &&
                 Bot.SpellZone[5].Id == candidate.Id) return false;
@@ -240,7 +245,10 @@ namespace MDPro3.Plugins.Features.StoryMode
         private bool NormalAllowed(ClientCard card)
         {
             if (StoryAiEvaluation.Exodia(card)) return false;
-            if (StoryAiEvaluation.HandTraps.Contains(card.Id) && (Bot.GetMonsterCount() > 0 || Enemy.GetMonsterCount() == 0)) return false;
+            // Hand traps are interaction reserved for the opponent.  Never walk one
+            // onto the field as a normal summon, even when the opponent already has a
+            // monster and the old empty-board exception would otherwise allow it.
+            if (StoryAiEvaluation.HandTraps.Contains(card.Id)) return false;
             int level = StoryAiEvaluation.Level(card);
             if (level <= 4) return true;
             // Special no-tribute summons (Timelords etc.) are handled by dedicated executors.
@@ -313,6 +321,14 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (StoryAiEvaluation.Has(card, CardType.Flip)) return true;
             // Do not hide an on-summon starter merely because the opponent has a large monster.
             if ((evaluation.Roles(card) & (StoryAiEvaluation.Role.Starter | StoryAiEvaluation.Role.Search | StoryAiEvaluation.Role.Extend)) != 0) return false;
+            // DefaultExecutor is deliberately conservative when the opponent controls a
+            // larger monster and can answer by setting every ordinary attacker.  That
+            // creates a deadlock in story turns: the hand is set, the phase ends, and
+            // the next turn repeats the same choice.  A legal attacker with ATK above
+            // DEF is a real forward action, so keep it face-up and summon it; the core
+            // still decides whether the summon itself is legal.
+            if (IsOurMain && StoryAiEvaluation.Attack(card) > StoryAiEvaluation.Defense(card) &&
+                !StoryAiEvaluation.HandTraps.Contains(card.Id)) return false;
             return base.OnSelectMonsterSummonOrSet(card);
         }
 

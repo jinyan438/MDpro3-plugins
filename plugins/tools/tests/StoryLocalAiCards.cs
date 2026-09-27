@@ -68,6 +68,16 @@ internal static partial class StoryLocalAiTests
                 Set(c.Data, "Race", 32); Set(c, "Race", 32);
                 Set(c.Data, "Attribute", 2); Set(c, "Attribute", 2);
                 Set(c.Data, "Name", "水晶机巧-继承玻纤"); return c;
+            case 46659709: // 银河战士
+                c = Card(2000, 0, Monster, location, controller, id, "这张卡可以从手卡把1张其他的光属性怪兽送去墓地，从手卡特殊召唤。\r\n这张卡特殊召唤成功时才能发动。从卡组把1只「银河」怪兽加入手卡。", 5);
+                Set(c.Data, "Race", 32); Set(c, "Race", 32);
+                Set(c.Data, "Attribute", 16); Set(c, "Attribute", 16);
+                Set(c.Data, "Name", "银河战士"); return c;
+            case 58069384: // 电子龙·新星
+                c = Card(2100, 1600, (CardType)8388641, location, controller, id, "机械族5星怪兽×2\r\n1回合1次，把这张卡1个超量素材取除才能发动。选择自己墓地1只「电子龙」特殊召唤。\r\n对方把怪兽的效果发动时，把这张卡的超量素材取除才能发动。那个发动无效。", 5);
+                Set(c.Data, "Race", 32); Set(c, "Race", 32);
+                Set(c.Data, "Attribute", 16); Set(c, "Attribute", 16);
+                Set(c.Data, "Name", "电子龙·新星"); return c;
             case 3544583: // 无之毕竟
                 c = Card(0, 2100, (CardType)4161, location, controller, id, "通常怪兽×2", 2);
                 Set(c.Data, "Race", 4); Set(c, "Race", 4);

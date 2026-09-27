@@ -141,7 +141,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private void CommitEffect(EffectIntent intent)
         {
             effectIntent = intent;
-            evaluation.NoteDevelopmentEffect(intent.Description);
+            evaluation.NoteDevelopmentEffect(intent.Source, intent.Description);
             CommitExtraPlan(intent.Summon);
         }
 
