@@ -1,0 +1,65 @@
+{
+  "date": "2026-09-28",
+  "scope": "story local AI generic effect and end-board planning; plugins only",
+  "pairedBaseline": "core-ai-general-effects-openings-v1 and core-ai-general-effects-fixtures-v1",
+  "currentRuns": {
+    "openings": "core-ai-general-effects-openings-clean",
+    "fixtures": "core-ai-general-effects-fixtures-clean",
+    "galaxy": "core-ai-general-effects-galaxy-clean"
+  },
+  "validation": {
+    "localAiChecks": 4461,
+    "extractorTests": { "generalEffects": 17, "effectSafety": 14, "levelEffects": 7 },
+    "pairedNativeExecutions": 454,
+    "currentGalaxyReplay": 9,
+    "completedWithoutCoreRetryOrTimeout": true
+  },
+  "paired": {
+    "openings": {
+      "perVersion": 176,
+      "fullEndstateChanges": 32,
+      "monsterIdentityChanges": 28,
+      "identityChangesByDeck": { "galaxy": 11, "synchro": 1, "xyz": 6, "fusion": 4, "link": 6 },
+      "identityChangedCases": [
+        "galaxy-0407-37", "galaxy-0407-40", "galaxy-0407-59", "galaxy-0407-60",
+        "galaxy-0407-70", "galaxy-0407-72", "galaxy-0407-80", "galaxy-0407-97",
+        "galaxy-0407-101", "galaxy-0407-114", "galaxy-0407-117", "synchro-0201-4",
+        "xyz-0401-0", "xyz-0401-1", "xyz-0401-3", "xyz-0401-5", "xyz-0401-7",
+        "xyz-0401-11", "fusion-0512-0", "fusion-0512-1", "fusion-0512-4",
+        "fusion-0512-6", "link-0013-2", "link-0013-4", "link-0013-5",
+        "link-0013-7", "link-0013-9", "link-0013-10"
+      ],
+      "terminalAppearances": {
+        "galaxyNo38": [20, 22], "galaxyUtopicDracoFuture": [8, 12],
+        "xyzUtopicDracoFuture": [11, 10], "xyzEclipseTwins": [6, 7],
+        "fusionLionDancerGoddess": [0, 1], "fusionSP": [10, 10],
+        "linkApollousa": [3, 7], "linkBaronne": [4, 3]
+      }
+    },
+    "fixtures": {
+      "perVersion": 51,
+      "fullEndstateChanges": 9,
+      "monsterIdentityChanges": 9,
+      "changedFamilies": { "galaxyEight": 3, "galaxyFour": 3, "galaxyKeepFive": 3 },
+      "otherGenericLevelFixturesUnchanged": 42
+    }
+  },
+  "sha256": {
+    "baselineAssembly": "527A292F8D7EE4E4416F77FF845228D260D4BCA2EE7447D065877EFDCBB69115",
+    "currentSourceAssembly": "3328DD5E70286319912F2B0BA011B94461C48CE15B39606B7BF30DF5D77345DC",
+    "currentNativeAssembly": "88C52DF4D49246CFE91AA600C8C72B420B3AEF3B3DE4549E04E7472624FD42CB",
+    "baselineHarness": "FF573BFED2E562E9BF5DD8C7B9BEF7CB03E58C1FAAE46DEA4766C0724B84B063",
+    "currentHarness": "9F190D32575081FA929034A6B3EBED2E4501D97010CC2DE5710FE1A5603C62E8",
+    "openingCases": "0327DCD2CC33BAF730B95C26397FB7388A66699817A9394F01089800647752FD",
+    "fixtureCases": "285B56E59F94EDEF807E82D3BC729E04560D142069A56681CD8653EAB413AAED",
+    "galaxyCases": "06F310498A1744406C9C3944C462D5EE6819E08FBD643E7B6F2652DA83FFB506",
+    "core": "4FF86E05701F802D0DC1939B186AC91AEC0174252BFF5171E3A3E5A425AAFEB2",
+    "cards": "04B1197239517AB50FB49DB8450F83E920A81F5D82A83BDC8F9C7F7ED1AA8400",
+    "scripts": "2379DB65F8E718993E21DA063F812E14EE9495FF90F1FA4523E0FF8A16271549"
+  },
+  "limits": [
+    "Only bounded, conservatively parsed Lua effect families are planned.",
+    "One-turn unopposed or constructed native scenarios are not full-match win rates.",
+    "Changed boards include tradeoffs and do not prove global optimality."
+  ]
+}

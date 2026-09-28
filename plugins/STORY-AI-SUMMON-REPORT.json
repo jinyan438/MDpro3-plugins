@@ -1,0 +1,346 @@
+{
+  "无干扰固定起手": {
+    "counts": [
+      {
+        "deck": "synchro",
+        "metric": "流天救世星龙",
+        "before": 2,
+        "after": 10,
+        "n": 48
+      },
+      {
+        "deck": "synchro",
+        "metric": "星尘龙",
+        "before": 16,
+        "after": 11,
+        "n": 48
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇",
+        "before": 19,
+        "after": 43,
+        "n": 48
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇＋蚀之双子",
+        "before": 4,
+        "after": 19,
+        "n": 48
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞狮子神姬",
+        "before": 0,
+        "after": 2,
+        "n": 48
+      },
+      {
+        "deck": "fusion",
+        "metric": "S:P",
+        "before": 33,
+        "after": 31,
+        "n": 48
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞香姬",
+        "before": 14,
+        "after": 15,
+        "n": 48
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨",
+        "before": 17,
+        "after": 18,
+        "n": 48
+      },
+      {
+        "deck": "link",
+        "metric": "女男爵",
+        "before": 0,
+        "after": 8,
+        "n": 48
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨或女男爵",
+        "before": 17,
+        "after": 24,
+        "n": 48
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨＋女男爵",
+        "before": 0,
+        "after": 2,
+        "n": 48
+      }
+    ],
+    "before": "plugins\\.selfcheck\\story\\core-ai-summon-final-before",
+    "after": "plugins\\.selfcheck\\story\\core-ai-summon-final-after",
+    "interruption_before": 0,
+    "interruption_after": 0,
+    "n": 192
+  },
+  "灰流丽条件": {
+    "counts": [
+      {
+        "deck": "synchro",
+        "metric": "流天救世星龙",
+        "before": 1,
+        "after": 1,
+        "n": 8
+      },
+      {
+        "deck": "synchro",
+        "metric": "星尘龙",
+        "before": 2,
+        "after": 2,
+        "n": 8
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇",
+        "before": 1,
+        "after": 5,
+        "n": 8
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇＋蚀之双子",
+        "before": 0,
+        "after": 2,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞狮子神姬",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "S:P",
+        "before": 2,
+        "after": 4,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞香姬",
+        "before": 3,
+        "after": 2,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨",
+        "before": 4,
+        "after": 3,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "女男爵",
+        "before": 0,
+        "after": 1,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨或女男爵",
+        "before": 4,
+        "after": 4,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨＋女男爵",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      }
+    ],
+    "before": "plugins\\.selfcheck\\story\\core-ai-summon-ash-before",
+    "after": "plugins\\.selfcheck\\story\\core-ai-summon-ash-after",
+    "interruption_before": 27,
+    "interruption_after": 29,
+    "n": 32
+  },
+  "无限泡影条件": {
+    "counts": [
+      {
+        "deck": "synchro",
+        "metric": "流天救世星龙",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "synchro",
+        "metric": "星尘龙",
+        "before": 1,
+        "after": 1,
+        "n": 8
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇",
+        "before": 3,
+        "after": 7,
+        "n": 8
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇＋蚀之双子",
+        "before": 1,
+        "after": 1,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞狮子神姬",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "S:P",
+        "before": 2,
+        "after": 4,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞香姬",
+        "before": 3,
+        "after": 3,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨",
+        "before": 4,
+        "after": 3,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "女男爵",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨或女男爵",
+        "before": 4,
+        "after": 3,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨＋女男爵",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      }
+    ],
+    "before": "plugins\\.selfcheck\\story\\core-ai-summon-imperm-before",
+    "after": "plugins\\.selfcheck\\story\\core-ai-summon-imperm-after",
+    "interruption_before": 32,
+    "interruption_after": 32,
+    "n": 32
+  },
+  "陨石条件": {
+    "counts": [
+      {
+        "deck": "synchro",
+        "metric": "流天救世星龙",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "synchro",
+        "metric": "星尘龙",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇",
+        "before": 0,
+        "after": 1,
+        "n": 8
+      },
+      {
+        "deck": "xyz",
+        "metric": "未来龙皇＋蚀之双子",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞狮子神姬",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "S:P",
+        "before": 3,
+        "after": 1,
+        "n": 8
+      },
+      {
+        "deck": "fusion",
+        "metric": "舞香姬",
+        "before": 2,
+        "after": 4,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "女男爵",
+        "before": 0,
+        "after": 2,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨或女男爵",
+        "before": 0,
+        "after": 2,
+        "n": 8
+      },
+      {
+        "deck": "link",
+        "metric": "阿波罗萨＋女男爵",
+        "before": 0,
+        "after": 0,
+        "n": 8
+      }
+    ],
+    "before": "plugins\\.selfcheck\\story\\core-ai-summon-nibiru-before",
+    "after": "plugins\\.selfcheck\\story\\core-ai-summon-nibiru-after",
+    "interruption_before": 19,
+    "interruption_after": 22,
+    "n": 32
+  }
+}

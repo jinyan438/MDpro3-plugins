@@ -70,6 +70,12 @@ namespace MDPro3.Plugins.Features.StoryMode
 
     public abstract partial class StoryLuckyExecutor
     {
+        private static bool BattleProtected(ClientCard card) => !card.IsDisabled() && (card.IsMonsterInvincible() ||
+            StoryAiEvaluation.Contains(card.Data?.Description ?? "", "cannot be destroyed by battle", "不会被战斗破坏", "不會被戰鬥破壞", "戦闘では破壊されない"));
+
+        private static bool Pierces(ClientCard card) => !card.IsDisabled() && MatchesEffect(card.Data?.Description ?? "",
+            @"(?:If|When) this card attacks a Defense Position monster, inflict piercing battle damage|这张卡向守备表示怪兽攻击的场合[^。]*攻击力超过那个守备力[^。]*战斗伤害|このカードが守備表示モンスターを攻撃した場合[^。]*戦闘ダメージ");
+
         private StoryAiBattlePlanner.Plan PlanBattle(IList<ClientCard> attackers, IList<ClientCard> defenders)
         {
             var exchanges = new StoryAiBattlePlanner.Exchange[attackers.Count, defenders.Count];
@@ -80,7 +86,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 var attacker = attackers[a];
                 string text = attacker.Data?.Description ?? "";
                 bool noDirect = !attacker.CanDirectAttack && StoryAiEvaluation.Contains(text, "cannot attack directly", "不能直接攻击", "不能直接攻擊");
-                directDamage[a] = noDirect ? 0 : Math.Max(0, attacker.Attack);
+                directDamage[a] = noDirect || evaluation.BattleDamageBlocked ? 0 : Math.Max(0, attacker.Attack);
                 canDirect[a] = attacker.CanDirectAttack && !noDirect;
                 if (canDirect[a] && defenders.Count > 0 && StoryAiEvaluation.Contains(text, "half", "一半", "半分")) directDamage[a] /= 2;
                 for (int d = 0; d < defenders.Count; d++)
@@ -93,7 +99,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                         // them. Probe with a suitable attacker, then replan after it is revealed.
                         int risk = Math.Max(0, 1800 - attacker.Attack);
                         move.Allowed = attacker.Attack >= 1400 && risk < Bot.LifePoints;
-                        move.OwnDamage = risk;
+                        move.OwnDamage = evaluation.OwnBattleDamageBlocked ? 0 : risk;
                         move.Value = 450 - risk * .5f;
                         // No speculative destruction or damage can turn this probe into a lethal.
                     }
@@ -110,12 +116,12 @@ namespace MDPro3.Plugins.Features.StoryMode
                             !attacker.IsMonsterInvincible() && !defender.IsMonsterInvincible();
                         if (allowed && ordinary)
                         {
-                            bool kills = attack > defense || attack == defense && defender.IsAttack() && attack > 0;
-                            bool loses = defender.IsAttack() && attack <= defense && defense > 0;
-                            move.Allowed = kills;
+                            bool kills = !BattleProtected(defender) && (attack > defense || attack == defense && defender.IsAttack() && attack > 0);
+                            bool loses = !BattleProtected(attacker) && defender.IsAttack() && attack <= defense && defense > 0;
                             move.RemovesDefender = kills;
-                            move.EnemyDamage = defender.IsAttack() ? Math.Max(0, attack - defense) : 0;
-                            move.OwnDamage = Math.Max(0, defense - attack);
+                            move.EnemyDamage = !evaluation.BattleDamageBlocked && (defender.IsAttack() || Pierces(attacker)) ? Math.Max(0, attack - defense) : 0;
+                            move.OwnDamage = evaluation.OwnBattleDamageBlocked ? 0 : Math.Max(0, defense - attack);
+                            move.Allowed = kills || move.EnemyDamage > 0;
                             move.Value = (kills ? evaluation.Threat(defender) : 0) - (loses ? evaluation.Keep(attacker) : 0);
                         }
                         else if (allowed && attack > defense)

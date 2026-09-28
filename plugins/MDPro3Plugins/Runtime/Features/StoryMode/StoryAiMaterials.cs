@@ -24,6 +24,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             internal int Min = 2, Max = 7;
             internal bool Effect, Normal, NonLink, DifferentNames, NonToken, ExtraOnly, EnemyOne, Tuner;
+            internal bool XyzBodies, ExcludeNumbers;
             internal int Race, NonTunerRace;
             internal List<MaterialRequirement> Requirements;
         }
@@ -34,14 +35,18 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         internal bool LiveInteraction(ClientCard c)
         {
-            if (c.IsDisabled() || HandTraps.Contains(c.Id)) return false;
-            switch (c.Id)
-            {
-                case 84815190: case 27548199: case 88581108: case 98127546: case 63101468: case 65741786: return true;
-                case 4280258: return c.Location != CardLocation.MonsterZone || Attack(c) >= 800;
-            }
-            return c.IsFloodgate() || Regex.IsMatch(c.Data?.Description ?? "",
-                @"negate (?:the|that|its) (?:activation|effect)|(?:发动|發動|发動|效果)[^。\n]{0,12}(?:无效|無效|無効)", RegexOptions.IgnoreCase);
+            if (Hidden(c) || c.IsDisabled() || IsHandTrap(c) || InteractionSpent(c) ||
+                c.Location == CardLocation.MonsterZone && c.IsFacedown()) return false;
+            var interaction = Facts(c).Effects.Where(InteractionFact).ToList();
+            if (interaction.Count > 0) return interaction.Any(f =>
+                (f.AttackCost <= 0 || c.Location != CardLocation.MonsterZone || Attack(c) >= f.AttackCost) &&
+                (f.CostLocations != (int)CardLocation.Extra || f.CostFilter == null || Bot.ExtraDeck.Any(f.CostFilter)));
+            // Negating the effects of our own recruited body is a drawback, not
+            // an opponent-turn interruption. Likewise, an ignition-only negate
+            // is useful for breaking a board but is not a reason to stop building.
+            string text = c.Data?.Description ?? "";
+            return c.IsFloodgate() || Regex.IsMatch(text,
+                @"\bnegate (?:the|that) activation\b|(?:Quick Effect|opponent activates)[^\n]*\bnegate (?:the|that|its|their|those) effects?\b|(?:发动时|发动的场合|對方回合|对方回合|双方回合)[^\n]*(?:发动|效果)[^。\n]{0,12}(?:无效|無效|無効)|(?:发动|效果)[^。\n]{0,12}(?:无效|無效|無効)[^\n]*(?:对方回合|對方回合|双方回合)", RegexOptions.IgnoreCase);
         }
 
         // The same scale values a body before and after a summon. Text ranking bonuses for
@@ -54,16 +59,29 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (Has(c, CardType.Token)) return 180 + attack * .18f;
             float value = 350 + Math.Max(attack, Defense(c) * .45f) * .55f;
             if (Has(c, CardType.Effect)) value += 250;
-            if (LiveInteraction(c)) value += c.Id == 4280258 ? Math.Min(4, attack / 800) * 900 : 1900;
+            if (LiveInteraction(c)) value += InteractionValue(c, attack);
+            if (LiveInteraction(c) && Regex.IsMatch(c.Data?.Description ?? "",
+                @"(?:发动无效|negate the activation)[^\r\n]*(?:控制权|take control)", RegexOptions.IgnoreCase)) value += 1400;
             if (!c.IsDisabled() && c.IsFloodgate()) value += 2000;
             if (!c.IsDisabled() && (c.IsMonsterInvincible() || c.IsMonsterDangerous())) value += 700;
-            if (!c.IsDisabled() && c.Id == 21887175) value += 1400; // targeting protection, attack redirection and battle effect
+            if (!c.IsDisabled()) value += Facts(c).ProtectionBonus + Facts(c).ImmunityBonus;
             if (Has(c, CardType.Link)) value += LinkRating(c) * 180;
             if (Has(c, CardType.Xyz) && Has(c, CardType.Effect))
                 value += Math.Min(2, projectedMaterials >= 0 ? projectedMaterials : c.Overlays.Count) * 700;
             if (c.IsDisabled()) value *= .65f;
             if (c.Attacked && duel.Player == 0) value -= 180;
             return Math.Max(100, value);
+        }
+
+        private float InteractionValue(ClientCard card, int attack)
+        {
+            var facts = Facts(card).Effects.Where(InteractionFact).ToList();
+            if (facts.Count == 0) return 1900;
+            return facts.Max(f => f.AttackCost > 0 ? Math.Min(4, attack / f.AttackCost) * 900 :
+                f.Purpose == StoryLuckyExecutor.EffectPurpose.Negate ? (f.Narrow ? 1000 : f.LinkCounters || f.MonsterOnly || f.SpellTrapOnly ? 1900 : 2500) :
+                f.Purpose == StoryLuckyExecutor.EffectPurpose.TemporaryPair ? 2200 :
+                f.Purpose == StoryLuckyExecutor.EffectPurpose.QuickLink ? 1900 : f.AllTargets ? 2400 : 1600);
+
         }
 
         internal bool PremiumBody(ClientCard c)
@@ -126,25 +144,18 @@ namespace MDPro3.Plugins.Features.StoryMode
             return 0;
         }
 
+        private readonly Dictionary<int, Recipe> materialRecipes = new Dictionary<int, Recipe>();
         private Recipe MaterialRecipe(ClientCard destination)
         {
-            switch (destination.Id)
-            {
-                case 86066372: return new Recipe { Effect = true };
-                case 4280258: return new Recipe { DifferentNames = true, NonToken = true };
-                case 65741786: return new Recipe { NonLink = true, Max = 2 };
-                case 90290572: return new Recipe { Race = (int)CardRace.Fairy, Max = 2 };
-                case 48589580: return new Recipe { Race = (int)CardRace.Fairy };
-                case 50588353: return new Recipe { Tuner = true, Max = 2 };
-                case 21887175: return new Recipe { ExtraOnly = true };
-                case 98127546: return new Recipe { Effect = true, Min = 4, EnemyOne = true };
-                case 38342335: return new Recipe { DifferentNames = true };
-                case 2857636: return new Recipe { DifferentNames = true, Max = 2 };
-                case 63101468: return new Recipe { NonTunerRace = (int)CardRace.Fairy };
-                case 84815190: case 27548199: case 74586817: case 73580471: return new Recipe();
-                case 88581108: return new Recipe();
-                case 46772449: return new Recipe { Max = 2 };
-            }
+            if (materialRecipes.TryGetValue(destination.Id, out var recipe)) return recipe;
+            recipe = ReadMaterialRecipe(destination);
+            if (materialRecipes.Count < 4096) materialRecipes[destination.Id] = recipe;
+            return recipe;
+        }
+
+        private Recipe ReadMaterialRecipe(ClientCard destination)
+        {
+            if (scriptRecipes.TryGetValue(CardIdentity(destination), out var scripted)) return scripted;
             string recipe = (destination.Data?.Description ?? "").Split('\n')[0].Trim();
             // Only accept recipes whose entire material clause is understood. An unknown
             // archetype/alternate procedure is unknown cost, never a free extra-deck summon.
@@ -156,7 +167,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 var en = Regex.Match(recipe, @"^(?<n>[1-7])(?<plus>\+)?\s+(?<kind>Effect |non-Link |Normal )?[Mm]onsters?(?<tail>, except Tokens)?\s*$", RegexOptions.IgnoreCase);
                 var zh = Regex.Match(recipe, @"^(?<kind>效果|连接怪兽以外的|連接怪獸以外的|通常)?怪[兽獸](?<n>[1-7])只(?<plus>以上)?(?<tail>.*)$");
                 var m = en.Success ? en : zh;
-                if (!m.Success) return null;
+                if (!m.Success) return StructuredLinkRecipe(recipe, differentNames);
                 var result = new Recipe { Min = int.Parse(m.Groups["n"].Value), DifferentNames = differentNames };
                 result.Max = m.Groups["plus"].Success ? 7 : result.Min;
                 string kind = m.Groups["kind"].Value;
@@ -172,31 +183,27 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (Has(destination, CardType.Fusion))
             {
                 var clauses = Regex.Split(recipe, @"＋|(?<!\d)\+");
-                if (clauses.Length < 2 || clauses.Length > 7) return null;
+                if (clauses.Length > 7) return null;
                 var requirements = clauses.Select(ParseMaterial).ToList();
-                if (requirements.Any(r => r == null)) return null;
+                if (requirements.Any(r => r == null) || requirements.Sum(r => r.Min) < 2) return null;
                 return new Recipe { Min = requirements.Sum(r => r.Min), Max = Math.Min(7, requirements.Sum(r => r.Max)),
                     Requirements = requirements };
             }
             if (Has(destination, CardType.Xyz))
             {
-                // Database clauses use several equivalent forms, for example
-                // “机械族5星怪兽×2”, “5星怪兽×2只以上” and
-                // “2 Machine-Type Level 5 monsters”. Parse level, count and
-                // optional race instead of treating the first unfamiliar wording
-                // as an unknown procedure.
-                var level = Regex.Match(recipe, @"(?<level>\d+)\s*(?:星|阶|階)\s*怪[兽獸]|\bLevel\s*(?<levelEn>\d+)\b", RegexOptions.IgnoreCase);
-                var count = Regex.Match(recipe, @"[×x]\s*(?<n>[2-7])\s*(?<plus>以上|\+)?|^(?<nEn>[2-7])\s+.*?\bLevel\s*\d+\b.*?monsters?\s*(?<plusEn>\+|以上|or more)?$|(?<nZh>[2-7])\s*(?:只|体|隻)(?<plusZh>以上|\+)?", RegexOptions.IgnoreCase);
-                if (level.Success && count.Success)
+                var xyzBodies = XyzBodyRecipe(recipe);
+                if (xyzBodies != null) return xyzBodies;
+                var match = Regex.Match(recipe, @"^(?<kind>.+?)[×x]\s*(?<n>[2-7])\s*(?:只|体|隻)?(?<plus>以上|\+)?$", RegexOptions.IgnoreCase);
+                if (!match.Success) match = Regex.Match(recipe, @"^(?<n>[2-7])(?<plus>\+)?\s+(?<kind>.+?)(?<more> or more)?$", RegexOptions.IgnoreCase);
+                if (!match.Success) match = Regex.Match(recipe, @"^(?<kind>.+?)(?<n>[2-7])\s*(?:只|体|隻)(?<plus>以上|\+)?$");
+                if (match.Success)
                 {
-                    string levelText = level.Groups["level"].Success ? level.Groups["level"].Value : level.Groups["levelEn"].Value;
-                    string countText = count.Groups["n"].Success ? count.Groups["n"].Value :
-                        count.Groups["nEn"].Success ? count.Groups["nEn"].Value : count.Groups["nZh"].Value;
-                    int parsedLevel = int.Parse(levelText), parsedCount = int.Parse(countText);
-                    if (parsedLevel == Level(destination))
+                    var requirement = ParseMaterial(match.Groups["kind"].Value);
+                    if (requirement != null && requirement.Level == Level(destination))
                     {
-                        bool plus = count.Groups["plus"].Success || count.Groups["plusEn"].Success || count.Groups["plusZh"].Success;
-                        return new Recipe { Min = parsedCount, Max = plus ? 7 : parsedCount, Race = RecipeRace(recipe) };
+                        requirement.Min = int.Parse(match.Groups["n"].Value);
+                        requirement.Max = match.Groups["plus"].Success || match.Groups["more"].Success ? 7 : requirement.Min;
+                        return new Recipe { Min = requirement.Min, Max = requirement.Max, Requirements = new List<MaterialRequirement> { requirement } };
                     }
                 }
             }
@@ -205,7 +212,16 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         private bool ValidMaterials(ClientCard destination, Recipe recipe, List<ClientCard> cards, Func<ClientCard, bool> fromExtra = null)
         {
+            if (Has(destination, CardType.Synchro))
+                foreach (var flexible in cards.Where(c => CanBeNonTuner(c) && Has(c, CardType.Tuner) && !c.IsDisabled() && c.Controller == destination.Controller))
+                {
+                    var view = ProjectComboMaterial(flexible, Level(flexible), nonTuner: true);
+                    var alternative = cards.Select(c => c == flexible ? view : c).ToList();
+                    if (ValidMaterials(destination, recipe, alternative, fromExtra == null ? null : new Func<ClientCard, bool>(c => fromExtra(c == view ? flexible : c)))) return true;
+                }
+            if (cards.Count == 1 && IsOverlayUpgrade(destination, cards[0])) return true;
             if (cards.Count < recipe.Min || cards.Count > recipe.Max) return false;
+            if (cards.Any(c => !MaterialPermits(c, destination))) return false;
             if (cards.Count(c => c.Controller == 1) > (recipe.EnemyOne ? 1 : 0)) return false;
             if (recipe.Effect && cards.Any(c => !Has(c, CardType.Effect))) return false;
             if (recipe.Normal && cards.Any(c => !Has(c, CardType.Normal))) return false;
@@ -217,6 +233,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (recipe.Tuner && !cards.Any(c => Has(c, CardType.Tuner))) return false;
             if (Has(destination, CardType.Link))
             {
+                if (recipe.Requirements != null && !AssignMaterials(recipe.Requirements, cards)) return false;
                 int totals = 1;
                 foreach (var c in cards)
                 {
@@ -226,7 +243,9 @@ namespace MDPro3.Plugins.Features.StoryMode
                 int required = LinkRating(destination);
                 return required > 0 && required <= 8 && (totals & (1 << required)) != 0;
             }
-            if (Has(destination, CardType.Xyz)) return cards.All(c => !Has(c, CardType.Link | CardType.Xyz | CardType.Token) && Level(c) == Level(destination));
+            if (recipe.XyzBodies) return cards.All(c => Has(c, CardType.Xyz) && (!recipe.ExcludeNumbers || !NumberMonster(c))) && cards.Select(Level).Distinct().Count() == 1;
+            if (Has(destination, CardType.Xyz)) return cards.All(c => !Has(c, CardType.Link | CardType.Xyz | CardType.Token) && Level(c) == Level(destination)) &&
+                (recipe.Requirements == null || AssignMaterials(recipe.Requirements, cards));
             if (Has(destination, CardType.Fusion) && recipe.Requirements != null)
                 return AssignMaterials(recipe.Requirements, cards);
             if (Has(destination, CardType.Synchro) && recipe.Requirements != null) return
@@ -255,26 +274,23 @@ namespace MDPro3.Plugins.Features.StoryMode
         }
 
         private bool AvailableSynchroDraw(ClientCard c) => HasImmediateSynchroDraw(c) &&
-            !c.IsDisabled() && Bot.Deck.Count > 0 && !usedDevelopmentEffects.Contains(c.Id);
+            !DrawLocked && !c.IsDisabled() && Bot.Deck.Count > 0 && !usedDevelopmentEffects.Contains(c.Id);
 
         private float ImmediatePayoff(ClientCard c)
         {
             // This trigger is valued through actual remaining deck bodies in the forward model.
             if (ParseDeckTunerTrigger(c) != null) return 0;
             if (HasImmediateSynchroDraw(c)) return AvailableSynchroDraw(c) ? 2000 : 0;
-            switch (c.Id)
-            {
-                case 50588353: return Bot.Deck.Concat(Bot.Hand).Any(x => Has(x, CardType.Tuner) && Level(x) <= 3) ? 2200 : 0;
-                case 90290572: return 1400; // one search/mill, not both plus a fictitious summon
-                case 48589580: return Bot.Hand.Count > 0 ? 600 : 0;
-                case 63101468: return 900;
-                case 27548199: return Bot.Graveyard.Any(x => Has(x, CardType.Link)) ? 1100 : 0;
-                case 4280258: case 65741786: case 21887175: case 88581108: case 74586817: return 0;
-                case 84815190: return Enemy.GetFieldCount() > 0 ? 900 : 0;
-                case 86066372: return Math.Min(2, Enemy.GetFieldCount()) * 1300;
-                case 73580471: return Math.Max(0, Enemy.GetMonsters().Sum(BoardScore) + Enemy.GetSpells().Sum(Threat) -
+            var effects = Facts(c).Effects;
+            if (effects.Any(f => f.Purpose == StoryLuckyExecutor.EffectPurpose.LinkEquip))
+                return Bot.Graveyard.Any(x => Has(x, CardType.Link)) ? 1100 : 0;
+            if (effects.Any(f => f.Purpose == StoryLuckyExecutor.EffectPurpose.BoardWipe))
+                return Math.Max(0, Enemy.GetMonsters().Sum(BoardScore) + Enemy.GetSpells().Sum(Threat) -
                     Bot.GetMonsters().Sum(BoardScore) - Bot.GetSpells().Sum(Threat));
-            }
+            if (ComboProfiles(c).Any()) return 0; // evaluate actual targets through the resource search
+            if (effects.Any(f => f.Purpose == StoryLuckyExecutor.EffectPurpose.TargetRemoval && !f.Quick))
+                return Math.Min(effects.Any(f => f.AttributeCost) ? 2 : 1, Enemy.GetFieldCount()) * (effects.Any(f => f.AttributeCost) ? 1300 : 900);
+            if (effects.Any(InteractionFact)) return 0; // already included in BoardValue
             var role = Roles(c);
             // A small bounded potential, not all the text's conditional benefits at once.
             if ((role & (Role.Search | Role.Draw)) != 0) return 1100;
@@ -304,9 +320,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 if ((enemyMask & (enemyMask - 1)) != 0) continue;
                 var material = pool.Where((c, i) => (mask & (1 << i)) != 0).ToList();
                 if (required != null && !material.Contains(required) || !ValidMaterials(destination, recipe, material)) continue;
-                int attack = Attack(destination);
-                if (destination.Id == 4280258) attack = material.Count * 800;
-                if (destination.Id == 86066372) attack += material.Max(LinkRating) * 1000;
+                int attack = ProjectedSummonAttack(destination, material);
                 float body = BoardValue(destination, attack, hint == HintMsg.XyzMaterial ? material.Count : 0), payoff = ImmediatePayoff(destination);
                 float removed = material.Where(c => c.Controller == 1).Sum(BoardScore);
                 float cost = material.Where(c => c.Controller == 0).Sum(c => BoardValue(c) -
@@ -330,8 +344,13 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal ExtraPlan PlanCoreOfferedExtra(ClientCard destination)
         {
             if (destination.Location != CardLocation.Extra) return null;
+            // A known Link recipe was already exhaustively checked, including the
+            // zone after paying THIS set of materials. Do not undo that rejection
+            // with the unparsed two-cheapest-bodies fallback.
+            if (Has(destination, CardType.Link) && MaterialRecipe(destination) != null) return null;
             var pool = Bot.GetMonsters().Where(c => c.IsFaceup()).ToList();
             if (Has(destination, CardType.Fusion)) pool.AddRange(Bot.Hand.Where(c => Has(c, CardType.Monster)));
+            pool.RemoveAll(c => !MaterialPermits(c, destination));
             // The core confirms a legal procedure, but does not expose its complete cost
             // here. Commit only while every possible field material is expendable.
             bool oneBodyUpgrade = pool.Count == 1 && Has(destination, CardType.Xyz) &&
@@ -378,6 +397,11 @@ namespace MDPro3.Plugins.Features.StoryMode
     {
         private StoryAiEvaluation.ExtraPlan extraPlan;
         private readonly HashSet<ClientCard> selectedMaterials = new HashSet<ClientCard>();
+        private void CancelExtraPlan()
+        {
+            if (extraPlan != null) evaluation.NoteCancelledExtra(extraPlan.Destination);
+            CommitExtraPlan(null);
+        }
 
         private void CommitExtraPlan(StoryAiEvaluation.ExtraPlan plan)
         {
@@ -393,18 +417,34 @@ namespace MDPro3.Plugins.Features.StoryMode
                 var legal = cards.Where(c => !selectedMaterials.Contains(c))
                     .OrderBy(c => evaluation.MaterialCost(c, hint)).Take(min).ToList();
                 if (legal.Count < min || cancelable && legal.Any(c => evaluation.ProtectedBody(c) &&
-                    !extraPlan.Materials.Contains(c))) return new List<ClientCard>();
+                    !extraPlan.Materials.Contains(c))) { CancelExtraPlan(); return new List<ClientCard>(); }
                 foreach (var c in legal) selectedMaterials.Add(c);
                 return legal;
             }
-            var wanted = cards.Where(c => extraPlan.Materials.Contains(c) && !selectedMaterials.Contains(c))
-                .OrderBy(c => evaluation.BoardValue(c)).Take(max).ToList();
+            // Known deck composition uses detached objects, while the core reveals
+            // concrete cards only in this prompt. Reconcile by identity/location and
+            // multiplicity, never reuse one revealed card for two planned copies.
+            var remaining = new List<ClientCard>(extraPlan.Materials);
+            Func<ClientCard, ClientCard, bool> matches = (a, b) => a == b ||
+                a.Controller == b.Controller && a.Id == b.Id && a.Location == b.Location;
+            foreach (var selected in selectedMaterials)
+            {
+                int index = remaining.FindIndex(c => matches(c, selected));
+                if (index >= 0) remaining.RemoveAt(index);
+            }
+            var wanted = new List<ClientCard>();
+            foreach (var card in cards.Where(c => !selectedMaterials.Contains(c)).OrderBy(c => evaluation.BoardValue(c)))
+            {
+                int index = remaining.FindIndex(c => matches(c, card));
+                if (index < 0 || wanted.Count >= max) continue;
+                wanted.Add(card); remaining.RemoveAt(index);
+            }
             // Finish only after the planned set is complete: e.g. Apollousa's ATK depends
             // on the number of bodies, even if two Link-2s could already finish the procedure.
             if (min == 0 && wanted.Count == 0) return new List<ClientCard>();
             if (wanted.Count < min)
             {
-                if (cancelable) { CommitExtraPlan(null); return new List<ClientCard>(); }
+                if (cancelable) { CancelExtraPlan(); return new List<ClientCard>(); }
                 // A mandatory prompt cannot be undone here. Follow only the core's legal list
                 // and pay as little as possible, never CardSelector's arbitrary first-card fill.
                 wanted.AddRange(cards.Where(c => !wanted.Contains(c)).OrderBy(c => evaluation.MaterialCost(c, hint)).Take(min - wanted.Count));
@@ -416,6 +456,10 @@ namespace MDPro3.Plugins.Features.StoryMode
         public override void OnSpSummoned()
         {
             base.OnSpSummoned();
+            evaluation.NoteHandSummons(Duel.LastSummonedCards);
+            int solving = Duel.SolvingChainIndex;
+            if (solving > 0 && solving <= Duel.CurrentChainInfo.Count && Duel.CurrentChainInfo[solving - 1].ActivatePlayer == 0)
+                evaluation.NoteResourceSummons(Duel.LastSummonedCards, Duel.CurrentChainInfo[solving - 1].RelatedCard, Duel.CurrentChainInfo[solving - 1].ActivateDescription);
             CommitExtraPlan(null);
         }
     }

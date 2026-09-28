@@ -64,6 +64,20 @@ internal static class StoryEditorWeaverTests
                 && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "UsesStory") == 1, "tribute hook is scoped to story executors");
             Check(tribute.Body.Instructions.Count(i => i.Operand is MethodReference r
                 && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "SelectTribute") == 1, "story tribute selection is installed once");
+            var chainSelection = patched.MainModule.GetType("WindBot.Game.GameAI").Methods.Single(m => m.Name == "OnSelectChain");
+            var mainSelection = patched.MainModule.GetType("WindBot.Game.GameAI").Methods.Single(m => m.Name == "OnSelectIdleCmd");
+            var numberSelection = patched.MainModule.GetType("WindBot.Game.GameAI").Methods.Single(m => m.Name == "OnAnnounceNumber");
+            Check(numberSelection.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "FinishNumber") == numberSelection.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
+                "number selection preserves native fallback and passes actual options to story planning");
+            Check(mainSelection.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "FinishMain") == mainSelection.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
+                "all main-phase return paths record only the committed story action");
+            Check(chainSelection.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "PrepareChain") == 1, "complete chain offers reach story arbitration once");
+            Check(chainSelection.Body.Instructions.Count(i => i.Operand is MethodReference r
+                && r.DeclaringType.Name == "StoryLocalAiHooks" && r.Name == "FinishChain") == chainSelection.Body.Instructions.Count(i => i.OpCode == OpCodes.Ret),
+                "each native chain return clears temporary response preferences");
         }
         File.WriteAllBytes(args[1], result.InMemoryAssembly.PeData);
         if (result.InMemoryAssembly.PdbData.Length > 0) File.WriteAllBytes(Path.ChangeExtension(args[1], ".pdb"), result.InMemoryAssembly.PdbData);

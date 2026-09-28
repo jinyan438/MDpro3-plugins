@@ -65,6 +65,18 @@ namespace MDPro3.Plugins.CodeGen
             var localAi = module.GetType("MDPro3.Plugins.Features.StoryMode.StoryLocalAiHooks");
             Override(Method(module.GetType("WindBot.Game.GameAI"), "OnSelectTribute", 5),
                 Method(localAi, "UsesStory", 1), Method(localAi, "SelectTribute", 6));
+            var chainSelection = Method(module.GetType("WindBot.Game.GameAI"), "OnSelectChain", 4);
+            var chainPrefix = new List<Instruction> { Instruction.Create(OpCodes.Ldarg_0) };
+            foreach (var parameter in chainSelection.Parameters) chainPrefix.Add(Instruction.Create(OpCodes.Ldarg, parameter));
+            chainPrefix.Add(Instruction.Create(OpCodes.Call, Method(localAi, "PrepareChain", 5)));
+            Prepend(chainSelection, chainPrefix);
+            WrapReturn(chainSelection, Method(localAi, "FinishChain", 2));
+            var effectSelection = Method(module.GetType("WindBot.Game.GameAI"), "OnSelectEffectYn", 2);
+            Prepend(effectSelection, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldarg_1),
+                Instruction.Create(OpCodes.Ldarg_2), Instruction.Create(OpCodes.Call, Method(localAi, "PrepareEffect", 3)) });
+            WrapReturn(effectSelection, Method(localAi, "FinishEffect", 2));
+            WrapReturn(Method(module.GetType("WindBot.Game.GameAI"), "OnSelectIdleCmd", 1), Method(localAi, "FinishMain", 2));
+            WrapReturn(Method(module.GetType("WindBot.Game.GameAI"), "OnAnnounceNumber", 1), Method(localAi, "FinishNumber", 3), true);
             var view = module.GetType("MDPro3.UI.DeckView");
             var ui = module.GetType("MDPro3.UI.ServantUI.DeckEditorUI");
             var editor = module.GetType("MDPro3.Servant.DeckEditor");
@@ -198,13 +210,20 @@ namespace MDPro3.Plugins.CodeGen
             foreach (var instruction in instructions) il.InsertBefore(first, instruction);
         }
 
-        private static void WrapReturn(MethodDefinition method, MethodDefinition hook)
+        private static void WrapReturn(MethodDefinition method, MethodDefinition hook, bool includeParameters = false)
         {
             foreach (var ret in method.Body.Instructions.Where(i => i.OpCode == OpCodes.Ret).ToArray())
             {
                 ret.OpCode = OpCodes.Ldarg_0; ret.Operand = null;
+                var cursor = ret;
+                if (includeParameters)
+                    foreach (var parameter in method.Parameters)
+                    {
+                        var load = Instruction.Create(OpCodes.Ldarg, parameter);
+                        method.Body.GetILProcessor().InsertAfter(cursor, load); cursor = load;
+                    }
                 var call = Instruction.Create(OpCodes.Call, hook);
-                method.Body.GetILProcessor().InsertAfter(ret, call);
+                method.Body.GetILProcessor().InsertAfter(cursor, call);
                 method.Body.GetILProcessor().InsertAfter(call, Instruction.Create(OpCodes.Ret));
             }
         }

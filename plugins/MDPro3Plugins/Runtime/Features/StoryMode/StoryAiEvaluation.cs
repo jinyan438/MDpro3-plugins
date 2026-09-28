@@ -26,6 +26,10 @@ namespace MDPro3.Plugins.Features.StoryMode
             14558127, 23434538, 94145021, 59438930, 73642296, 97268402, 52038441,
             34267821, 91800273, 27204311, 84192580, 42141493, 87126721
         };
+        // Match the core's alternate-art identity rule, not arbitrary same-name
+        // aliases (e.g. distinct Harpie Lady effects).
+        internal static int CardIdentity(ClientCard card) => card.Data?.Alias > 0 && Math.Abs((long)card.Id - card.Data.Alias) < 20 ? card.Data.Alias : card.Id;
+        internal static bool IsHandTrap(ClientCard card) => HandTraps.Contains(CardIdentity(card));
         internal static bool Exodia(ClientCard c) => c != null &&
             (c.Id == 7902349 || c.Id == 8124921 || c.Id == 44519536 || c.Id == 70903634 || c.Id == 33396948);
         internal static bool Hidden(ClientCard c) => c.Controller == 1 &&
@@ -88,7 +92,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             var role = Roles(c);
             if (c.Location == CardLocation.Hand)
             {
-                if (HandTraps.Contains(c.Id)) value += 2100;
+                if (IsHandTrap(c)) value += 2100;
                 if ((role & (Role.Search | Role.Starter)) != 0) value += 1600;
                 if ((role & Role.Extend) != 0) value += 650;
                 if (Has(c, CardType.Monster) && Level(c) > 4 && (role & Role.Extend) == 0) value -= 800;
@@ -104,7 +108,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (c.Controller == 1) return -Threat(c); // e.g. Super Polymerization / Kaiju.
             float value = Keep(c);
             bool sendsToGrave = hint != HintMsg.Remove && hint != HintMsg.ToDeck && hint != HintMsg.XyzMaterial;
-            if (sendsToGrave && (Roles(c) & Role.Grave) != 0) value -= 1200;
+            string text = c.Data?.Description ?? "";
+            // A cost/material is not sent by a card effect (e.g. Shaddoll). Do not
+            // invent a grave trigger when choosing a discard or summon material.
+            bool needsEffect = Contains(text, "sent to the gy by a card effect", "sent to the graveyard by a card effect",
+                "被效果送去墓地", "被效果送入墓地", "被卡的效果送去墓地", "効果で墓地へ送られた");
+            if (sendsToGrave && !needsEffect && (Roles(c) & Role.Grave) != 0) value -= 1200;
             if (c.Location == CardLocation.Overlay) value = 200;
             if (c.Location == CardLocation.Grave) value *= .45f;
             return value;
@@ -135,7 +144,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if ((role & Role.Interrupt) != 0) value += 800;
             if ((role & Role.Draw) != 0) value += 900;
             if ((role & Role.Removal) != 0 && Enemy.GetFieldCount() > 0) value += 1200;
-            if (HandTraps.Contains(c.Id)) value -= 2400;
+            if (IsHandTrap(c)) value -= 2400;
             if (Has(c, CardType.Tuner) && Bot.GetMonsterCount() > 0 && Bot.ExtraDeck.Any(x => Has(x, CardType.Synchro))) value += 800;
             if (!Has(c, CardType.Tuner) && Bot.GetMonsters().Any(x => Has(x, CardType.Tuner)) &&
                 Bot.ExtraDeck.Any(x => Has(x, CardType.Synchro) && Bot.GetMonsters().Any(t => Has(t, CardType.Tuner) && Level(t) + Level(c) == Level(x)))) value += 1000;
@@ -149,11 +158,20 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal bool CanTarget(ClientCard target, ClientCard source)
         {
             if (Hidden(target)) return true;
+            // "Your opponent cannot target" does not prevent our own rescue,
+            // equip or temporary banish. Unconditional targeting immunity does.
+            if (source != null && target.Controller == source.Controller)
+                return target.IsDisabled() || !MatchesEffectTargetProtection(target.Data?.Description ?? "");
             if (target.IsShouldNotBeTarget()) return false;
             if (!target.IsDisabled() && Contains(target.Data?.Description ?? "", "cannot target this card with card effects",
                 "cannot be targeted by card effects", "对方不能把这张卡作为效果的对象", "不能成为对方的效果的对象",
                 "對方不能把這張卡作為效果的對象", "相手の効果の対象にならない")) return false;
             return Has(source, CardType.Monster) ? !target.IsShouldNotBeMonsterTarget() : !target.IsShouldNotBeSpellTrapTarget();
         }
+
+        private static bool MatchesEffectTargetProtection(string text) =>
+            System.Text.RegularExpressions.Regex.IsMatch(text,
+                @"(?<!opponent's )cannot be targeted by card effects|不能成为(?:卡的)?效果的对象|不能成為(?:卡的)?效果的對象",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 }

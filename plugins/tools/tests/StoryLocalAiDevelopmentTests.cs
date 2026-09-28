@@ -563,8 +563,18 @@ internal static partial class StoryLocalAiTests
         var highTuner = Card(7000, type: Monster | CardType.Tuner, location: CardLocation.Deck, level: 1);
         Set(highTuner.Data, "Name", "Group Tuner 1"); crowded.Bot.Deck.Add(highTuner);
         var action = crowded.AI.OnSelectIdleCmd(crowded.Duel.MainPhase);
+        // Equivalent final boards can now prefer establishing a negate before
+        // resolving the exposed starter. Verify the real continuation, not a tie's
+        // historical first-card ordering.
+        if (action.Action == MainPhaseAction.MainAction.SpSummon && action.Index != 14)
+        {
+            ApplyDevelopmentSummon(crowded, action);
+            crowded.Duel.MainPhase = new MainPhase();
+            if (SynchroSubsets(crowded.Bot.GetMonsters(), 5).Any()) crowded.Duel.MainPhase.SpecialSummonableCards.Add(bridge);
+            action = crowded.AI.OnSelectIdleCmd(crowded.Duel.MainPhase);
+        }
         Check(action.Action == MainPhaseAction.MainAction.SpSummon && action.Index == 14,
-            "more than 40 legal first-step branches cannot prune a small starter before its concrete summon trigger is evaluated");
+            "more than 40 first-step branches retain a real route to the small starter and its concrete summon trigger");
     }
 
     private static float DevelopmentBonus(Fixture f, ClientCard addition)

@@ -437,7 +437,15 @@ internal static partial class StoryLocalAiTests
     private static void Main()
     {
         typeof(NamedCardsManager).GetField("_cards", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, database);
-        DevelopmentRegressions(); SafetyRegressions(); Rules(); Selection(); SumsAndProperties(); Battles(); BattleComparison();
+        typeof(GameAI).Assembly.GetType("WindBot.Program").GetField("Rand", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
+            .SetValue(null, new Random(123));
+        if (Environment.GetEnvironmentVariable("STORY_EFFECT_SAFETY_ONLY") == "1") { EffectSafetyRegressions(); return; }
+        ResourcePlanningRegressions(); SummonPlanningRegressions(); InteractionRegressions(); DevelopmentRegressions(); SafetyRegressions(); Rules(); Selection(); SumsAndProperties(); Battles(); BattleComparison();
+        CorePlanningRegressions();
+        GalaxyLevelRegressions();
+        GeneralLevelRegressions();
+        EffectSafetyRegressions();
+        GeneralEffectRegressions();
         Console.WriteLine("Story local AI tests: PASS (" + checks + " checks)");
     }
 }

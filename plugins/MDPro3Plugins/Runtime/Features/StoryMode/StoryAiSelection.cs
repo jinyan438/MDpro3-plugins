@@ -52,12 +52,16 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (planned != null) return planned;
             // Dedicated effects and AI.Attack have already queued their exact targets/materials.
             if (AI.HaveSelectedCards()) return null;
+            var resource = PlannedResourceSelection(cards, min, max, hint);
+            if (resource != null) return resource;
             var effect = EffectSelection(cards, min, max, hint, cancelable);
             if (effect != null) return effect;
             if (hint == HintMsg.SpSummon && min == 1 && max == 1 &&
                 cards.All(c => c.Location == CardLocation.Extra && StoryAiEvaluation.Has(c, CardType.Fusion)))
             {
-                var fusion = cards.Select(evaluation.PlanFusionSelection).Where(p => p != null)
+                int solving = Duel.SolvingChainIndex;
+                var source = solving > 0 && solving <= Duel.CurrentChainInfo.Count ? Duel.CurrentChainInfo[solving - 1].RelatedCard : null;
+                var fusion = evaluation.PlanResolvedFusion(source, cards) ?? cards.Select(evaluation.PlanFusionSelection).Where(p => p != null)
                     .OrderByDescending(p => p.Gain).FirstOrDefault();
                 if (fusion != null)
                 {
@@ -68,10 +72,17 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (cancelable && min > 0 && RemovalHint(hint) && cards.All(c => c.Controller == 0 &&
                 (c.Location == CardLocation.MonsterZone || c.Location == CardLocation.SpellZone))) return new List<ClientCard>();
             var potential = new Dictionary<ClientCard, float>();
-            if (IsOurMain && max == 1 && (hint == HintMsg.SpSummon || hint == HintMsg.ToField ||
-                hint == HintMsg.AddToHand && Duel.MainPhase != null && Duel.MainPhase.SummonableCards.Count > 0))
-                potential = evaluation.DevelopmentBonuses(cards.Where(c => hint != HintMsg.AddToHand ||
-                    StoryAiEvaluation.Level(c) <= 4 && !StoryAiEvaluation.Has(c, CardType.SpSummon)).ToList());
+            if (IsOurMain && min == 1 && max == 1 && (hint == HintMsg.Discard || hint == HintMsg.ToGrave) && cards.All(c => c.Location == CardLocation.Hand))
+                potential = evaluation.DiscardBonuses(cards);
+            if (IsOurMain && max == 1 && (hint == HintMsg.SpSummon || hint == HintMsg.ToField))
+                potential = evaluation.DevelopmentBonuses(cards);
+            if (IsOurMain && max == 1 && hint == HintMsg.AddToHand)
+            {
+                potential = evaluation.AcquisitionBonuses(cards);
+                if (Duel.MainPhase != null && Duel.MainPhase.SummonableCards.Count > 0)
+                    foreach (var pair in evaluation.DevelopmentBonuses(cards.Where(evaluation.NormalSearchCandidate).ToList()))
+                        potential[pair.Key] = Math.Max(potential.TryGetValue(pair.Key, out var bonus) ? bonus : 0, pair.Value);
+            }
             var ranked = cards.Select((card, index) => new { card, index, score = SelectionValue(card, hint) +
                 (potential.TryGetValue(card, out float bonus) ? bonus : 0) })
                 .OrderByDescending(x => x.score).ThenBy(x => x.index).ToList();
@@ -86,14 +97,40 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         public override int OnSelectOption(IList<int> options)
         {
-            if (Card != null && Card.Id == _CardId.LightningStorm && lightningStormOption >= 0)
+            int levelOption = SelectLevelOption(options);
+            if (levelOption >= 0) return levelOption;
+            var route = ResolvingResourceRoute();
+            if (route != null)
             {
-                int preferred = _CardId.LightningStorm * 16 + lightningStormOption;
-                int index = options.IndexOf(preferred);
+                int preferred = evaluation.ComboOption(route.Card, route.Description);
+                int index = preferred == 0 ? -1 : options.IndexOf(preferred);
+                if (index >= 0) return index;
+            }
+            var effect = SelectingEffect();
+            if (effect?.Fact?.Option > 0)
+            {
+                int index = options.IndexOf(effect.Fact.Option);
                 if (index >= 0) return index;
             }
             // -1 allows GameAI to consume AI.SelectOption from a dedicated strategy.
             return -1;
+        }
+
+        private StoryAiEvaluation.SummonPlan ResolvingResourceRoute()
+        {
+            int solving = Duel.SolvingChainIndex;
+            return resourceSelection != null && solving > 0 && solving <= Duel.CurrentChainInfo.Count &&
+                Duel.CurrentChainInfo[solving - 1].ActivatePlayer == 0 &&
+                Duel.CurrentChainInfo[solving - 1].RelatedCard == resourceSelection.Card ? resourceSelection : null;
+        }
+
+        public override bool OnSelectYesNo(int desc)
+        {
+            var route = ResolvingResourceRoute();
+            // Alternative modes belong to this resolving effect and expire with
+            // its route; never queue a global answer for an optional prompt.
+            if (route != null && evaluation.DeclineComboAlternative(route.Card, route.Description, desc)) return false;
+            return base.OnSelectYesNo(desc);
         }
 
         public override CardPosition OnSelectPosition(int cardId, IList<CardPosition> positions)

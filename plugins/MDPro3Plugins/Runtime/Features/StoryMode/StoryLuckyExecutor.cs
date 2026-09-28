@@ -16,16 +16,14 @@ namespace MDPro3.Plugins.Features.StoryMode
 
             AddExecutor(ExecutorType.GoToBattlePhase, StoryEvenlyBattle);
 
-            AddExecutor(ExecutorType.Activate, _CardId.MysticalSpaceTyphoon, DefaultMysticalSpaceTyphoon);
-            AddExecutor(ExecutorType.Activate, _CardId.CosmicCyclone, DefaultCosmicCyclone);
             AddExecutor(ExecutorType.Activate, _CardId.GalaxyCyclone, DefaultGalaxyCyclone);
             AddExecutor(ExecutorType.Activate, _CardId.BookOfMoon, StoryBookOfMoon);
             AddExecutor(ExecutorType.Activate, _CardId.CompulsoryEvacuationDevice, DefaultCompulsoryEvacuationDevice);
             AddExecutor(ExecutorType.Activate, _CardId.CallOfTheHaunted, DefaultCallOfTheHaunted);
             AddExecutor(ExecutorType.Activate, _CardId.Scapegoat, DefaultScapegoat);
-            AddExecutor(ExecutorType.Activate, _CardId.MaxxC, DefaultMaxxC);
+            AddExecutor(ExecutorType.Activate, _CardId.MaxxC, StoryDrawPressure);
             AddExecutor(ExecutorType.Activate, _CardId.AshBlossom, StoryAshBlossom);
-            AddExecutor(ExecutorType.Activate, _CardId.GhostOgreAndSnowRabbit, DefaultGhostOgreAndSnowRabbit);
+            AddExecutor(ExecutorType.Activate, _CardId.GhostOgreAndSnowRabbit, StoryGhostOgre);
             AddExecutor(ExecutorType.Activate, _CardId.GhostBelle, DefaultGhostBelleAndHauntedMansion);
             AddExecutor(ExecutorType.Activate, _CardId.EffectVeiler, StoryDisableMonster);
             AddExecutor(ExecutorType.Activate, _CardId.CalledByTheGrave, StoryCalledByTheGrave);
@@ -34,12 +32,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             AddExecutor(ExecutorType.Activate, _CardId.SolemnJudgment, DefaultSolemnJudgment);
             AddExecutor(ExecutorType.Activate, _CardId.SolemnWarning, DefaultSolemnWarning);
             AddExecutor(ExecutorType.Activate, _CardId.SolemnStrike, DefaultSolemnStrike);
-            AddExecutor(ExecutorType.Activate, _CardId.TorrentialTribute, StoryTorrentialTribute);
             AddExecutor(ExecutorType.Activate, _CardId.HeavyStorm, DefaultHeavyStorm);
-            AddExecutor(ExecutorType.Activate, _CardId.HarpiesFeatherDuster, StoryFeatherDuster);
             AddExecutor(ExecutorType.Activate, _CardId.HammerShot, DefaultHammerShot);
-            AddExecutor(ExecutorType.Activate, _CardId.DarkHole, StoryDarkHole);
-            AddExecutor(ExecutorType.Activate, _CardId.Raigeki, StoryRaigeki);
             AddExecutor(ExecutorType.Activate, _CardId.SmashingGround, DefaultSmashingGround);
             AddExecutor(ExecutorType.Activate, _CardId.PotOfDesires, DefaultPotOfDesires);
             AddExecutor(ExecutorType.Activate, _CardId.AllureofDarkness, DefaultAllureofDarkness);
@@ -76,6 +70,24 @@ namespace MDPro3.Plugins.Features.StoryMode
             AddExecutor(ExecutorType.Summon, _CardId.ExodiaTheForbiddenOne, JustDontIt);
 
             RegisterStoryPolicy();
+            RegisterArtworkRules();
+        }
+
+        private void RegisterArtworkRules()
+        {
+            // Lua uses the original script for alternate artwork. Keep its dedicated
+            // rule and veto as well, in the same order as the original registration.
+            for (int i = Executors.Count - 1; i >= 0; i--)
+            {
+                var rule = Executors[i];
+                if (rule.CardId <= 0) continue;
+                for (int offset = 1; offset < 20; offset++)
+                {
+                    var art = YGOSharp.OCGWrapper.NamedCard.Get(rule.CardId + offset);
+                    if (art?.Alias == rule.CardId)
+                        Executors.Insert(i + 1, new CardExecutor(rule.Type, art.Id, rule.Func));
+                }
+            }
         }
 
     }

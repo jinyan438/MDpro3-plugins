@@ -1,0 +1,103 @@
+"""Summarise paired native runs without treating own costs/rescues as errors."""
+import json
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.stdout.reconfigure(encoding='utf-8')
+RUNS = ROOT / '.selfcheck/story'
+GROUPS = [('synchro', '0201 同调'), ('xyz', '0401 超量'), ('fusion', '0512 融合'), ('link', '0013 链接')]
+
+
+def load(label):
+    folder = RUNS / ('core-ai-' + label)
+    manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8-sig'))
+    def tsv(name):
+        return {r[0]: r[1:] for line in (folder / name).read_text(encoding='utf-8-sig').splitlines()
+                if (r := line.split('\t'))}
+    events, endstates, results = tsv('interactions.tsv'), tsv('endstates.tsv'), tsv('results.tsv')
+    cases = tsv('cases.tsv')
+    if events.keys() != cases.keys() or endstates.keys() != cases.keys() or results.keys() != cases.keys():
+        raise ValueError('Incomplete run: ' + label)
+    return dict(label=label, manifest=manifest, cases=cases, events=events, endstates=endstates, results=results)
+
+
+def compare(before, after):
+    if before['cases'] != after['cases']:
+        raise ValueError('Paired decks/seeds differ')
+    for key in ('cases', 'core', 'cards', 'scripts', 'harness'):
+        if before['manifest']['hashes'][key] != after['manifest']['hashes'][key]:
+            raise ValueError('Paired input differs: ' + key)
+    for key in ('turns', 'interruption'):
+        if before['manifest'][key] != after['manifest'][key]:
+            raise ValueError('Paired condition differs: ' + key)
+    summary = []
+    for prefix, name in GROUPS:
+        keys = [k for k in before['cases'] if k.startswith(prefix)]
+        def total(run, index): return sum(int(run['events'][key][index]) for key in keys)
+        summary.append(dict(deck=name, pairs=len(keys),
+            spOwnPermanentBanish=[total(before, 7), total(after, 7)],
+            ownChainNegations=[total(before, 2), total(after, 2)],
+            ownAttackStops=[total(before, 3), total(after, 3)],
+            ownFieldEffectMoves=[total(before, 4), total(after, 4)],
+            identicalEndstates=sum(before['endstates'][k] == after['endstates'][k] for k in keys),
+            wins=[sum(int(run['events'][k][6]) <= 0 for k in keys) for run in (before, after)],
+            losses=[sum(int(run['events'][k][5]) <= 0 for k in keys) for run in (before, after)]))
+    return dict(summary=summary, before=before, after=after)
+
+
+opening = compare(load('interaction-baseline'), load('interaction-current'))
+pressure = compare(load('interaction-pressure-baseline'), load('interaction-pressure-current'))
+payload = dict(opening=opening, pressure=pressure)
+ai_checks = int(re.search(r'PASS \((\d+) checks\)', (RUNS/'interaction-current.log').read_text(encoding='utf-8-sig'))[1])
+baseline_failures = int(re.search(r'(\d+) failed scenarios', (RUNS/'interaction-baseline/new-regressions-final.log').read_text(encoding='utf-8-sig'))[1])
+payload['checks'] = dict(local=ai_checks, baselineFailures=baseline_failures, parser=14)
+(ROOT / 'STORY-AI-INTERACTION-REPORT.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+lines = ['# 通用 AI 效果干扰优化验证', '',
+    '本报告以本次任务开始时的工作区程序集为基线，不以 Git HEAD 为基线。已有展开规划全部保留。所有修改、编译、冻结程序集及测试产物均在 `plugins` 内；实际卡组、脚本和数据库只读使用。', '',
+    '## 改动与验证范围', '',
+    '- 使用本地 Lua 的精确效果描述编号识别 877 个效果：342 个连锁无效、72 个攻击无效、463 个简单破坏／除外／送墓／回手／回卡组效果。无法可靠分析的脚本不生成规则；不把卡面段落编号当作脚本编号，也不把费用函数当作效果处理。',
+    '- 发动前检查敌我、有效目标、必选数量与已无效连锁。选卡沿用同一意图；强制发动与强制选卡仍满足核心协议。',
+    '- S:P 分别处理登场永久除外与两卡暂时除外；保留对方清场时救两只己方、躲避指向干扰的用途，并避免墓地除外封住现成的直接斩杀。Ω 回收优先己方可利用的除外资源。',
+    '- 按代价与可重复使用次数分配无效：优先未来龙皇、希望魁龙等可再用的干扰，保留女男爵的单次全能无效。识别普通弃牌成本，保留苏生无效化和有收益的支付费用。', '',
+    '- 一时休战的双向伤害保护按实际到期回合记录，冥王结界波按实际受保护的一方记录；不为无损攻击浪费素材，也不为了抽一张而用一时休战阻断可见的直接斩杀。', '',
+    f'本地 AI **{ai_checks} 项检查通过**（基线原有 3240 项全部保留），新增 {ai_checks - 3240} 项；其中 414 项覆盖全部生成的无效效果编号。Lua 结构分析器 **14 项反例测试通过**。真实游戏源码编译、IL 注入与幂等验证通过；故事规则 **86 项**、模型配置 **38 项**通过。', '',
+    f'相同新增行为回归在冻结旧程序集上存在 **{baseline_failures} 个失败场景**，当前版本均通过。这里包含防御性非法候选及构造局面，不代表实际对局出现过 {baseline_failures} 次失误；详情见 `.selfcheck/story/interaction-baseline/new-regressions-final.log`。', '',
+    '## 实际 10 级角色卡组：无干扰首回合', '',
+    '每副 12 个固定起手，共 48 对；两版共 96 次核心执行。统计来自实际核心事件。', '',
+    '| 卡组 | 场景对数 | S:P 永久除外己方卡：前→后 | 完全一致的己方终场状态 |',
+    '| --- | ---: | ---: | ---: |']
+for row in opening['summary']:
+    lines.append(f"| {row['deck']} | {row['pairs']} | {row['spOwnPermanentBanish'][0]} → {row['spOwnPermanentBanish'][1]} | {row['identicalEndstates']} / {row['pairs']} |")
+lines += ['', '旧版的 8 次己方除外分别处理了融合 3 次、月光融合 3 次、月华香 1 次、灵王的波动 1 次；新版为 0。融合起手第 5 号额外保留了月光舞香姬。其他终场差异包括保存墓地资源，不等同于终端数量一律增加。', '',
+    '## 四回合固定压力对手', '',
+    '同样每副 12 个起手，共 48 对；两版共 96 次核心执行。对手使用固定顺序的无限泡影、雷击、黑洞和基因扭曲战狼，采用完全相同的发动、通常召唤和可获利攻击策略。到第 5 回合开始或提前结束时停止。', '',
+    '| 卡组 | 场景对数 | 己方效果无效己方连锁：前→后 | 己方取消己方攻击：前→后 | 己方场上卡因己方效果离场：前→后 |',
+    '| --- | ---: | ---: | ---: | ---: |']
+for row in pressure['summary']:
+    arrow = lambda key: f"{row[key][0]} → {row[key][1]}"
+    lines.append(f"| {row['deck']} | {row['pairs']} | {arrow('ownChainNegations')} | {arrow('ownAttackStops')} | {arrow('ownFieldEffectMoves')} |")
+lines += ['', '**离场数量是审计数据，不是失误次数。** 它包含 S:P 躲清场、流天救世星龙暂时除外自身、月光回手展开等正确动作；费用已按核心 `REASON_COST` 排除。连锁无效仅统计不同己方连锁环节之间的明确无效事件，排除泡影造成的“被无效卡自身开始结算”的事件，避免误归因。', '',
+    '全部 **192 次最终成对核心执行** 完成，未出现 Retry、Lua 错误、提示循环或超时。本组两版各提前取胜 4 场，不能据此宣称整体胜率提高。原始终场、LP、手牌、墓地、除外、实际攻防及各次连锁均保存在运行目录；JSON 保留所有配对样本与哈希。', '',
+    '压力组最终有 43 / 48 个己方终场状态一致，己方场面变化集中在融合组。第 4、5 号起手保留了更多场上怪兽；第 2、8、10 号在 S:P、舞香姬、表盘修复师等留场选择上存在取舍，未将这些差异一概计为提升。两版该组己方 LP 相同；对方 LP 在同调第 1 号为 1500→1000、融合第 4 号为 3800→2200、融合第 8 号为 3400→4200，其余一致。测试过程中曾发现过度拒绝己方双除外会失去躲雷击的机会，已补上不取对象清场的保护判断后重放，以上是修正后的最终结果。', '',
+    '## 限制与复现', '',
+    '这些结果证明所列误伤决策得到修复，并检查实际卡组在核心中的合法执行；不是任意卡组的最优解或完整胜率结论。复杂的自破坏收益、未识别的多模式效果、动态抗性与未公开信息仍有边界。生成表对应本地脚本版本；更新脚本后应重建并重跑验证。运行耗时受同机并行测试影响，本报告不把它用于性能提升结论。', '',
+    '```powershell',
+    'python plugins/tools/build_story_effect_safety.py',
+    'python plugins/tools/tests/test_story_effect_safety.py',
+    'plugins/tools/story-local-ai-test.ps1',
+    'plugins/tools/story-core-ai-test.ps1 -SkipCompile -Label interaction-current -Samples 12',
+    'plugins/tools/story-core-ai-test.ps1 -SkipCompile -Label interaction-pressure-current -Samples 12 -Interruption pressure -Turns 4',
+    'python plugins/tools/tests/story_interaction_report.py',
+    '```', '',
+    '冻结旧版重放应使用 `-ReuseAssembly -Label interaction-baseline` 或 `-ReuseAssembly -Label interaction-pressure-baseline`，保留原目录内的旧程序集。勿将当前编译结果覆盖冻结旧版。', '',
+    '本次没有运行会写入 `plugins` 以外目录的游戏同步／发布重建。日常启动器下一次同步重建后，游戏才会加载这些源码；现有正在运行的客户端不会自动热更新。', '',
+    '### 输入与程序集 SHA256', '']
+for label, run in [('基线', opening['before']), ('当前', opening['after'])]:
+    lines.append(f"- {label}核心测试程序集：`{run['manifest']['hashes']['assembly']}`")
+for key in ('cases', 'core', 'cards', 'scripts', 'harness'):
+    lines.append(f"- 相同的 {key}：`{opening['after']['manifest']['hashes'][key]}`")
+(ROOT / 'STORY-AI-INTERACTION-REPORT.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+print(json.dumps({k: payload[k]['summary'] for k in ('opening', 'pressure')}, ensure_ascii=False, indent=2))
