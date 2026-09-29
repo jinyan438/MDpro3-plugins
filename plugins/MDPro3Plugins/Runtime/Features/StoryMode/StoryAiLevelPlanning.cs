@@ -117,6 +117,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         }
         private void QueueLevelArrival(DevelopmentState state, ClientCard arrival, bool normal = false)
         {
+            if (!normal && Facts(arrival).SummonOnceKey != 0) state.SpecialSummons.Add(Facts(arrival).SummonOnceKey);
             if (normal || Has(arrival, CardType.Link | CardType.Xyz)) return;
             foreach (var body in state.Board.Where(b => !b.EffectsBlocked && !b.Card.IsDisabled() && (b.Fresh || b.Card.IsFaceup())))
                 foreach (var effect in StoryAiLevelEffects.For(body.Card).Where(p => p.SpecialArrival &&

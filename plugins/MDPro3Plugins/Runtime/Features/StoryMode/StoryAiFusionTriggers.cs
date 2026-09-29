@@ -24,7 +24,10 @@ namespace MDPro3.Plugins.Features.StoryMode
                 foreach (var child in ComboChoices(next, source, effect, budget, false, 0)) yield return child;
         }
 
-        private bool ExtraDestinationAllowed(DevelopmentState state, ClientCard destination) =>
+        private bool SpecialAttributeAllowed(DevelopmentState state, ClientCard destination) =>
+            state.AllowedAttributes == -1 || (Attribute(destination) & state.AllowedAttributes) != 0;
+
+        private bool ExtraDestinationAllowed(DevelopmentState state, ClientCard destination) => SpecialAttributeAllowed(state, destination) &&
             (!state.SynchroOnly || Has(destination, CardType.Synchro)) && (!state.XyzOnly || Has(destination, CardType.Xyz)) && state.Board.All(b =>
                 (!b.SynchroOnly || Has(destination, CardType.Synchro)) && (b.ExtraSetcode == 0 || destination.HasSetcode(b.ExtraSetcode)));
     }

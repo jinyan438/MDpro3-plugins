@@ -49,6 +49,26 @@ namespace MDPro3.Plugins.Features.StoryMode
                 @"\bnegate (?:the|that) activation\b|(?:Quick Effect|opponent activates)[^\n]*\bnegate (?:the|that|its|their|those) effects?\b|(?:发动时|发动的场合|對方回合|对方回合|双方回合)[^\n]*(?:发动|效果)[^。\n]{0,12}(?:无效|無效|無効)|(?:发动|效果)[^。\n]{0,12}(?:无效|無效|無効)[^\n]*(?:对方回合|對方回合|双方回合)", RegexOptions.IgnoreCase);
         }
 
+        // Normal-monster flavour text is not effect text, even if it says
+        // "destroy" or "banish". Preserve original effect typing for monsters
+        // temporarily treated as normal, matching the core's negate-any filter.
+        internal static bool HasNegatableEffects(ClientCard c) => c != null &&
+            (Has(c, CardType.Effect | CardType.Spell | CardType.Trap) ||
+             ((c.Data?.Type ?? 0) & (int)CardType.Effect) != 0);
+
+        // A target-negation effect is also useful against a normal summon/search
+        // starter or another card with a concrete generated advantage, even when
+        // that monster is not itself a quick-effect interruption. Keep vanilla and
+        // unclassified effect bodies out of the target pool.
+        internal bool ShouldDisableMonster(ClientCard c)
+        {
+            if (c == null || Hidden(c) || c.IsDisabled() || !Has(c, CardType.Monster) || !HasNegatableEffects(c) ||
+                c.Location != CardLocation.MonsterZone || c.IsFacedown()) return false;
+            if (c.IsMonsterShouldBeDisabledBeforeItUseEffect() || LiveInteraction(c)) return true;
+            var role = Roles(c);
+            return (role & (Role.Search | Role.Draw | Role.Extend | Role.Removal | Role.Interrupt | Role.Starter)) != 0;
+        }
+
         // The same scale values a body before and after a summon. Text ranking bonuses for
         // searches, draws and summons are deliberately NOT added together as guaranteed profit.
         internal float BoardValue(ClientCard c, int projectedAttack = -1, int projectedMaterials = -1)
@@ -276,20 +296,30 @@ namespace MDPro3.Plugins.Features.StoryMode
         private bool AvailableSynchroDraw(ClientCard c) => HasImmediateSynchroDraw(c) &&
             !DrawLocked && !c.IsDisabled() && Bot.Deck.Count > 0 && !usedDevelopmentEffects.Contains(c.Id);
 
-        private float ImmediatePayoff(ClientCard c)
+        // Forward-model branches must score against their own simulated resources.
+        // Falling back to the live duel is intentional for the small synchronous
+        // material planners, which do not have a DevelopmentState.
+        private float ImmediatePayoff(ClientCard c, DevelopmentState state = null)
         {
             // This trigger is valued through actual remaining deck bodies in the forward model.
             if (ParseDeckTunerTrigger(c) != null) return 0;
-            if (HasImmediateSynchroDraw(c)) return AvailableSynchroDraw(c) ? 2000 : 0;
+            int deckCount = state?.DeckCount ?? Bot.Deck.Count;
+            if (HasImmediateSynchroDraw(c)) return !DrawLocked && !c.IsDisabled() && deckCount > 0 && !usedDevelopmentEffects.Contains(c.Id) ? 2000 : 0;
             var effects = Facts(c).Effects;
             if (effects.Any(f => f.Purpose == StoryLuckyExecutor.EffectPurpose.LinkEquip))
-                return Bot.Graveyard.Any(x => Has(x, CardType.Link)) ? 1100 : 0;
+                return (state?.Grave ?? Bot.Graveyard).Any(x => Has(x, CardType.Link)) ? 1100 : 0;
             if (effects.Any(f => f.Purpose == StoryLuckyExecutor.EffectPurpose.BoardWipe))
-                return Math.Max(0, Enemy.GetMonsters().Sum(BoardScore) + Enemy.GetSpells().Sum(Threat) -
-                    Bot.GetMonsters().Sum(BoardScore) - Bot.GetSpells().Sum(Threat));
+            {
+                float enemy = (state?.Enemy ?? Enemy.GetMonsters()).Sum(BoardScore) + Enemy.GetSpells().Sum(Threat);
+                float own = (state == null ? Bot.GetMonsters().Sum(BoardScore) : state.Board.Sum(b => BodyValue(b))) + Bot.GetSpells().Sum(Threat);
+                return Math.Max(0, enemy - own);
+            }
             if (ComboProfiles(c).Any()) return 0; // evaluate actual targets through the resource search
             if (effects.Any(f => f.Purpose == StoryLuckyExecutor.EffectPurpose.TargetRemoval && !f.Quick))
-                return Math.Min(effects.Any(f => f.AttributeCost) ? 2 : 1, Enemy.GetFieldCount()) * (effects.Any(f => f.AttributeCost) ? 1300 : 900);
+            {
+                int targets = state == null ? Enemy.GetFieldCount() : state.Enemy.Count + Enemy.GetSpellCount();
+                return Math.Min(effects.Any(f => f.AttributeCost) ? 2 : 1, targets) * (effects.Any(f => f.AttributeCost) ? 1300 : 900);
+            }
             if (effects.Any(InteractionFact)) return 0; // already included in BoardValue
             var role = Roles(c);
             // A small bounded potential, not all the text's conditional benefits at once.

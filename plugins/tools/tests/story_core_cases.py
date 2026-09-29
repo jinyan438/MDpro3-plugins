@@ -19,7 +19,7 @@ if not 0 <= args.start <= 100000:
     raise ValueError('Start must be between 0 and 100000')
 progress = json.loads((root / 'StoryMode/progress.json').read_text(encoding='utf-8-sig'))
 rows = []
-for character, mechanic in [('0201', 'synchro'), ('0401', 'xyz'), ('0512', 'fusion'), ('0013', 'link')]:
+for character, mechanic in [('0201', 'synchro'), ('0508', 'xyz'), ('0101', 'fusion'), ('0806', 'link')]:
     deck = progress['opponents'][character]['10']
     for sample in range(args.start, args.start + args.samples):
         seed = 927000 + sample

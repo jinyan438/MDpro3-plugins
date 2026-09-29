@@ -1,0 +1,246 @@
+{
+  "local_checks": 4504,
+  "effect_safety_checks": 726,
+  "python_tests": {
+    "effect_safety": 15,
+    "general_effects": 17,
+    "level_effects": 7
+  },
+  "baseline_scope": "Candidate before the final normal-monster type guard, not the production baseline.",
+  "hero_before": {
+    "label": "field-safety-hero",
+    "scenarios": 8,
+    "hashes": {
+      "cases": "A613A13391B33A52F014D16DC5F52F4119268612CD58EE35D06B9883DA6DAB2F",
+      "assembly": "AFFECEBF47398B6C0DDEEEF3D0EFE07BF04E567A48713C5FA1D9DE238D88F3DF",
+      "core": "4FF86E05701F802D0DC1939B186AC91AEC0174252BFF5171E3A3E5A425AAFEB2",
+      "cards": "04B1197239517AB50FB49DB8450F83E920A81F5D82A83BDC8F9C7F7ED1AA8400",
+      "scripts": "2379DB65F8E718993E21DA063F812E14EE9495FF90F1FA4523E0FF8A16271549",
+      "harness": "1EE6E9630526F19E30F3059F7A7912286490B49DBCB6E495FAF30BE1E869D522"
+    },
+    "own_disable_targets": 2,
+    "own_chain_negates": 0,
+    "own_attack_stops": 0,
+    "sp_own_permanent_banishes": 0,
+    "disable_target_events": [
+      {
+        "scenario": "hero-0101-fixture-0",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            10045474,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-0",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            12580477,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-opening-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            12580477,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-opening-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            27780618,
+            0,
+            4
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            10045474,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            12580477,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-3",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            10045474,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-3",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            1948619,
+            0,
+            4
+          ]
+        ]
+      }
+    ]
+  },
+  "hero_after": {
+    "label": "field-safety-hero-fixed",
+    "scenarios": 8,
+    "hashes": {
+      "cases": "A613A13391B33A52F014D16DC5F52F4119268612CD58EE35D06B9883DA6DAB2F",
+      "assembly": "51191347E8102890A6AD64EDD3B76726E337E97D1DF567744B1883BB6A0F05C3",
+      "core": "4FF86E05701F802D0DC1939B186AC91AEC0174252BFF5171E3A3E5A425AAFEB2",
+      "cards": "04B1197239517AB50FB49DB8450F83E920A81F5D82A83BDC8F9C7F7ED1AA8400",
+      "scripts": "2379DB65F8E718993E21DA063F812E14EE9495FF90F1FA4523E0FF8A16271549",
+      "harness": "1EE6E9630526F19E30F3059F7A7912286490B49DBCB6E495FAF30BE1E869D522"
+    },
+    "own_disable_targets": 0,
+    "own_chain_negates": 0,
+    "own_attack_stops": 0,
+    "sp_own_permanent_banishes": 0,
+    "disable_target_events": [
+      {
+        "scenario": "hero-0101-fixture-0",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            10045474,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-0",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            12580477,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-opening-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            12580477,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            10045474,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-2",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            12580477,
+            1,
+            8
+          ]
+        ]
+      },
+      {
+        "scenario": "hero-0101-fixture-3",
+        "source": 23204029,
+        "description": 371264464,
+        "resolving": "-",
+        "targets": [
+          [
+            10045474,
+            1,
+            8
+          ]
+        ]
+      }
+    ]
+  },
+  "other_level10_after": {
+    "label": "field-safety-level10-fixed",
+    "scenarios": 16,
+    "hashes": {
+      "cases": "AAF4DA98AE4287CA625CB5C6E1B1F2E8217BBC18ED45F0F4005B2791141E7F76",
+      "assembly": "51191347E8102890A6AD64EDD3B76726E337E97D1DF567744B1883BB6A0F05C3",
+      "core": "4FF86E05701F802D0DC1939B186AC91AEC0174252BFF5171E3A3E5A425AAFEB2",
+      "cards": "04B1197239517AB50FB49DB8450F83E920A81F5D82A83BDC8F9C7F7ED1AA8400",
+      "scripts": "2379DB65F8E718993E21DA063F812E14EE9495FF90F1FA4523E0FF8A16271549",
+      "harness": "1EE6E9630526F19E30F3059F7A7912286490B49DBCB6E495FAF30BE1E869D522"
+    },
+    "own_disable_targets": 0,
+    "own_chain_negates": 0,
+    "own_attack_stops": 0,
+    "sp_own_permanent_banishes": 0,
+    "disable_target_events": []
+  },
+  "scope": "20 actual level-10 deck openings plus 4 constructed HERO field fixtures; up to four turns against the fixed pressure opponent. Not a full-duel win-rate benchmark."
+}

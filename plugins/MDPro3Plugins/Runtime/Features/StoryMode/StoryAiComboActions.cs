@@ -17,6 +17,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private sealed class ComboEffect
         {
             internal int Offset, InstanceKey, Life, Level, CostHint;
+            internal int BonusDraw, DrawMinimum, DrawGraveType, AllowedAttribute;
             internal int KeyCode, Attack = -1, LevelFromTarget, ConditionCount = 1, ExtraSetcode, PreferredOption, DeclineYesNo;
             internal CardLocation From, TargetFrom;
             internal CardLocation CostFrom, ConditionFrom, RevealFrom, FollowupFrom;
@@ -27,10 +28,11 @@ namespace MDPro3.Plugins.Features.StoryMode
             internal bool Once = true, Direct, ActivationOnly, DefaultDescription, SynchroOnly, XyzOnly, BodySynchroOnly, BanishOnLeave, Defense, SoftOnce;
             internal bool SummonTrigger, MaterialTrigger, TributeTrigger, DetachTrigger, Mill, Disabled;
             internal bool ExtraSummonTrigger, DuelOnce, Temporary, CannotAttack;
+            internal bool EmptyMain, EndPhase, ArrivalTurnOnly, ExcludeGraveName, OwnTributeTrigger;
             internal bool ExplicitDescription;
             internal bool NormalTrigger, SpecialTrigger, SentEffectTrigger, FusionMaterialTrigger, GenericTrigger;
             internal bool CopyTributeAttack, CannotTribute, ConditionExact, ActivationTurnOnly, AfterDiscard, MillNeedsGrave, ReturnNeedsHand;
-            internal bool Trigger => SummonTrigger || MaterialTrigger || TributeTrigger || DetachTrigger || SentEffectTrigger || FusionMaterialTrigger;
+            internal bool Trigger => SummonTrigger || MaterialTrigger || TributeTrigger || OwnTributeTrigger || DetachTrigger || SentEffectTrigger || FusionMaterialTrigger || EndPhase;
         }
         internal sealed class ComboSelection
         {
@@ -46,6 +48,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private readonly Dictionary<ClientCard, int> liveFusionNames = new Dictionary<ClientCard, int>();
         private readonly Dictionary<ClientCard, int> pendingFusionNames = new Dictionary<ClientCard, int>();
         private bool developmentXyzOnly;
+        private int developmentAllowedAttributes = -1;
         private readonly HashSet<ClientCard> comboSynchroBodies = new HashSet<ClientCard>();
         private readonly Dictionary<ClientCard, int> comboUntributableUntil = new Dictionary<ClientCard, int>();
         private static bool SetAny(ClientCard card, params int[] sets) => sets.Any(card.HasSetcode);
@@ -124,6 +127,12 @@ namespace MDPro3.Plugins.Features.StoryMode
             if ((effect.Kind == ComboKind.Self || effect.Kind == ComboKind.Recruit) && DevelopmentSummonsBlocked(state)) return false;
             if (effect.Mill && state.DeckCount <= 0 || effect.MillNeedsGrave && GraveReplacementActive()) return false;
             if (effect.ActivationTurnOnly && !state.ActivatedSpells.Contains(source)) return false;
+            if (effect.EmptyMain && state.Board.Any(b => b.Zone < 5)) return false;
+            if (effect.ArrivalTurnOnly && body?.Fresh != true && !summonedThisTurn.Contains(source)) return false;
+            // Detach is only meaningful for the live body that owns the overlay.
+            // A speculative branch may have consumed or bounced the source after
+            // the profile was queued; never let that stale profile throw.
+            if (effect.Cost == ComboCost.Detach && (body == null || body.OverlayCards.Count == 0)) return false;
             if (effect.OverlayFilter != null && (body == null || !body.OverlayCards.Any(effect.OverlayFilter))) return false;
             if (effect.RevealFilter != null && !ComboPool(state, effect.RevealFrom).Any(c => effect.RevealFilter(ComboView(state, c)))) return false;
             if (effect.ConditionFilter != null)
@@ -197,7 +206,9 @@ namespace MDPro3.Plugins.Features.StoryMode
                 case ComboCost.SendDeck:
                     costs = ComboPool(state, effect.CostFrom != 0 ? effect.CostFrom : CardLocation.Deck).Where(effect.CostFilter ?? effect.Filter); break;
                 case ComboCost.Detach:
-                    costs = state.Board.First(b => b.Card == source).OverlayCards; break;
+                    var detachBody = state.Board.FirstOrDefault(b => b.Card == source);
+                    if (detachBody == null) yield break;
+                    costs = detachBody.OverlayCards; break;
                 case ComboCost.BanishResource:
                     costs = ComboPool(state, effect.CostFrom != 0 ? effect.CostFrom : CardLocation.Hand | CardLocation.MonsterZone | CardLocation.Grave).Where(c => c != source && (effect.CostFilter == null || effect.CostFilter(c))); break;
             }
@@ -218,12 +229,13 @@ namespace MDPro3.Plugins.Features.StoryMode
                     SpendComboCard(paid, cost, effect.Cost == ComboCost.BanishField || effect.Cost == ComboCost.BanishResource, effect.Cost == ComboCost.ReturnField);
                     if (effect.Cost == ComboCost.Detach)
                     {
-                        var old = paid.Board.First(b => b.Card == source); var changed = CopyBody(old);
+                        var old = paid.Board.FirstOrDefault(b => b.Card == source);
+                        if (old == null || !old.OverlayCards.Contains(cost)) continue;
+                        var changed = CopyBody(old);
                         changed.OverlayCards.Remove(cost); changed.OverlayCount--; paid.Board[paid.Board.IndexOf(old)] = changed;
                         foreach (var trigger in ComboProfiles(cost).Where(e => e.DetachTrigger)) paid.PendingCombos.Add(Tuple.Create(cost, trigger));
                     }
-                    if (effect.Cost == ComboCost.Tribute && paid.Grave.Contains(cost))
-                        foreach (var trigger in ComboProfiles(cost).Where(e => e.TributeTrigger)) paid.PendingCombos.Add(Tuple.Create(cost, trigger));
+                    if (effect.Cost == ComboCost.Tribute) QueueTributeTriggers(paid, cost);
                 }
                 if (effect.Cost == ComboCost.Self || effect.Cost == ComboCost.SelfAndTuner || effect.Cost == ComboCost.SelfDiscard || effect.Cost == ComboCost.BanishSelfDiscard || effect.Cost == ComboCost.BanishSelf)
                     SpendComboCard(paid, source, effect.Cost == ComboCost.BanishSelfDiscard || effect.Cost == ComboCost.BanishSelf);
@@ -233,9 +245,11 @@ namespace MDPro3.Plugins.Features.StoryMode
                 if (effect.SoftOnce) { paid.ComboInstances.Add(source); paid.ComboEffectInstances.Add((source, effect.InstanceKey)); }
                 paid.Life -= effect.Life; paid.Credit -= effect.Life * .2f;
                 paid.SynchroOnly |= effect.SynchroOnly; paid.XyzOnly |= effect.XyzOnly;
+                if (effect.AllowedAttribute != 0) paid.AllowedAttributes &= effect.AllowedAttribute;
                 if (!effect.Trigger) paid.Depth++;
                 IEnumerable<ClientCard> targets = effect.Kind == ComboKind.Self ? new[] { source } :
-                    ComboPool(paid, effect.TargetFrom).Where(c => c != source && effect.Filter(ComboView(paid, c)));
+                    ComboPool(paid, effect.TargetFrom).Where(c => c != source && effect.Filter(ComboView(paid, c)) &&
+                        (!effect.ExcludeGraveName || !paid.Grave.Any(g => CardIdentity(g) == CardIdentity(c))));
                 // Equal names in hand and grave are different resources. Preserve
                 // those alternatives (and distinct field bodies), while merging
                 // interchangeable copies still in the same deck/hand zone.
@@ -254,11 +268,19 @@ namespace MDPro3.Plugins.Features.StoryMode
                         {
                             next.Grave.Remove(target); next.Reserve.Add(target); next.Acquired.Add(target);
                             next.Credit += HandCommitment(target); AddAcquiredActions(next, target);
+                            if (effect.BonusDraw > 0 && !DrawLocked && next.DeckCount >= effect.BonusDraw &&
+                                next.Grave.Count(c => (!effect.ActivationOnly || c != source) && Has(c, (CardType)effect.DrawGraveType)) >= effect.DrawMinimum)
+                            {
+                                next.Credit += effect.BonusDraw * 650;
+                                next.DeckCount -= effect.BonusDraw;
+                            }
                         }
                         else if (effect.Kind != ComboKind.FusionName) QueueSentByEffect(next, target);
                         if (effect.Kind == ComboKind.FusionName)
                         {
-                            var old = next.Board.First(b => b.Card == source); var changed = CopyBody(old); changed.FusionName = CardIdentity(target);
+                            var old = next.Board.FirstOrDefault(b => b.Card == source);
+                            if (old == null) continue;
+                            var changed = CopyBody(old); changed.FusionName = CardIdentity(target);
                             next.Board[next.Board.IndexOf(old)] = changed;
                         }
                         choices.Add(new ComboSelection { Card = target, Location = origin,
@@ -266,14 +288,17 @@ namespace MDPro3.Plugins.Features.StoryMode
                         if (effect.Kind == ComboKind.DrawDiscard) { next.DeckCount--; next.Credit += 1100; }
                         if (effect.LevelFromTarget == 1)
                         {
-                            var old = next.Board.First(b => b.Card == source);
+                            var old = next.Board.FirstOrDefault(b => b.Card == source);
+                            if (old == null) continue;
                             var changed = CopyBody(old); changed.ProjectedLevel = (old.ProjectedLevel > 0 ? old.ProjectedLevel : Level(source)) + Level(target);
                             changed.MaterialView = ProjectComboMaterial(source, changed.ProjectedLevel);
                             next.Board[next.Board.IndexOf(old)] = changed;
                         }
                         if (effect.LevelFromTarget == 2)
                         {
-                            var old = next.Board.First(b => b.Card == source); var changed = CopyBody(old);
+                            var old = next.Board.FirstOrDefault(b => b.Card == source);
+                            if (old == null) continue;
+                            var changed = CopyBody(old);
                             changed.ProjectedLevel = Level(target); changed.MaterialView = ProjectComboMaterial(source, changed.ProjectedLevel);
                             next.Board[next.Board.IndexOf(old)] = changed;
                         }
@@ -282,6 +307,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                     }
                     else
                     {
+                        if (effect.Kind != ComboKind.Normal && !SpecialAttributeAllowed(state, target)) continue;
                         if (effect.Kind != ComboKind.Self && (Has(target, CardType.SpSummon) || origin == CardLocation.Grave &&
                             !target.IsCanRevive() && !next.ProperlySummoned.Contains(target))) continue;
                         int zone = DevelopmentPlace(next, target, false);
@@ -328,6 +354,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             {
                 if (budget.Exhausted) yield break;
                 int zone = DevelopmentPlace(state, card, false); if (zone < 0) yield break;
+                if (!SpecialAttributeAllowed(state, card)) continue;
                 var next = CopyDevelopment(state); next.Reserve.Remove(card); next.Acquired.Remove(card);
                 next.Credit -= HandCommitment(card) + DrawPenalty(CardLocation.Hand) + SummonExposure(state);
                 next.Board.Add(new Body { Card = card, Zone = zone, Attack = Attack(card), Fresh = true });
@@ -377,6 +404,16 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (state.Grave.Contains(card) && ComboProfiles(card).Any(e => e.SentEffectTrigger) && !state.PendingFusionMaterials.Contains(card))
             { state.PendingFusionMaterials.Add(card); state.EffectSentOnly.Add(card); }
+        }
+        private void QueueTributeTriggers(DevelopmentState state, ClientCard tributed)
+        {
+            if (state.Grave.Contains(tributed))
+                foreach (var trigger in ComboProfiles(tributed).Where(e => e.TributeTrigger))
+                    state.PendingCombos.Add(Tuple.Create(tributed, trigger));
+            foreach (var source in ComboPool(state, CardLocation.Hand | CardLocation.Grave).Where(c => c != tributed))
+                foreach (var trigger in ComboProfiles(source).Where(e => e.OwnTributeTrigger && ComboReady(state, source, e)))
+                    if (!state.PendingCombos.Any(p => p.Item1 == source && p.Item2 == trigger))
+                        state.PendingCombos.Add(Tuple.Create(source, trigger));
         }
         private void QueueComboArrival(DevelopmentState state, ClientCard card, bool normal)
         {
@@ -471,7 +508,10 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (!negated && ComboProfiles(source).Any(e => e.ActivationTurnOnly) && description == 0) spellActivationTurns[source] = duel.Turn;
             if (!negated)
                 foreach (var effect in ComboProfiles(source).Where(e => ComboDescription(source, e, description)))
-                { developmentSynchroOnly |= effect.SynchroOnly; developmentXyzOnly |= effect.XyzOnly; }
+                {
+                    developmentSynchroOnly |= effect.SynchroOnly; developmentXyzOnly |= effect.XyzOnly;
+                    if (effect.AllowedAttribute != 0) developmentAllowedAttributes &= effect.AllowedAttribute;
+                }
             developmentCacheKey = summonCacheKey = null;
             if (!ComboProfiles(source).Any(e => e.Kind == ComboKind.FusionName && ComboDescription(source, e, description)) ||
                 !pendingFusionNames.TryGetValue(source, out int name)) return;

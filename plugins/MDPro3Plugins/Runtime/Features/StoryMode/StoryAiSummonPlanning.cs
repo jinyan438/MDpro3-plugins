@@ -123,6 +123,11 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         internal void NoteHandSummons(IEnumerable<ClientCard> cards)
         {
+            foreach (var card in cards.Where(c => c.Controller == 0))
+            {
+                summonedThisTurn.Add(card);
+                if (Facts(card).SummonOnceKey != 0) usedSpecialSummons.Add(Facts(card).SummonOnceKey);
+            }
             foreach (var card in cards.Where(c => c.Controller == 0 && c.LastLocation == CardLocation.Hand))
                 usedHandSummons.Add(card.Id);
             // Both caches also change when the live board/hand changes. Clear the
@@ -145,6 +150,7 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         private DevelopmentState AddDevelopmentBody(DevelopmentState state, ClientCard card, bool normal, bool root, SearchBudget budget)
         {
+            if (!normal && !SpecialAttributeAllowed(state, card)) return null;
             int zone = DevelopmentPlace(state, card, false);
             if (zone < 0 || budget.Exhausted) return null;
             var next = CopyDevelopment(state);
@@ -185,9 +191,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 foreach (var body in tributes)
                 {
                     SpendComboCard(paid, body.Card);
-                    foreach (var effect in ComboProfiles(body.Card).Where(e => e.TributeTrigger))
-                        if (!paid.ComboUsed.Contains(ComboKey(body.Card, effect)))
-                            paid.PendingCombos.Add(Tuple.Create(body.Card, effect));
+                    QueueTributeTriggers(paid, body.Card);
                 }
                 var next = AddDevelopmentBody(paid, card, true, root, budget);
                 if (next == null) continue;
@@ -224,6 +228,13 @@ namespace MDPro3.Plugins.Features.StoryMode
             }
         }
 
+        private static string DevelopmentFirstKey(DevelopmentState state)
+        {
+            return (state.FirstSummon == null ? 0 : RuntimeHelpers.GetHashCode(state.FirstSummon.Card)) + ":" +
+                (state.FirstSummon?.Normal == true) + ":" + (state.FirstSummon?.Description ?? 0) + ":" +
+                (state.Addition == null ? 0 : RuntimeHelpers.GetHashCode(state.Addition));
+        }
+
         // Keep at least one promising continuation for each first decision before
         // spending the rest of the beam on variants of the same tempting starter.
         private static IEnumerable<DevelopmentState> DevelopmentFrontier(IEnumerable<DevelopmentState> states, int width)
@@ -235,11 +246,30 @@ namespace MDPro3.Plugins.Features.StoryMode
                 (s.PendingSearch != null ? 1100 : 0) + (s.PendingRecruit != null ? 1100 : 0) +
                 (s.PendingHalq != null || s.PendingDeckTuner != null ? 1600 : 0) +
                 Math.Min(3, s.PendingCombos.Count + s.PendingFusionMaterials.Count) * 850).ToList();
-            var selected = ordered.GroupBy(s =>
-                (s.FirstSummon == null ? 0 : RuntimeHelpers.GetHashCode(s.FirstSummon.Card)) + ":" +
-                (s.FirstSummon?.Normal == true) + ":" + (s.FirstSummon?.Description ?? 0) + ":" + (s.Addition == null ? 0 : RuntimeHelpers.GetHashCode(s.Addition)))
-                .Select(g => g.First()).Take(width).ToList();
-            return selected.Concat(ordered.Where(s => !selected.Contains(s)).Take(Math.Max(0, width - selected.Count)));
+            var groups = ordered.GroupBy(DevelopmentFirstKey).Select(g => g.ToList()).ToList();
+            var selected = new List<DevelopmentState>();
+            var seenContinuations = new HashSet<string>();
+            var identities = new DevelopmentKeys();
+            // First give every root one candidate. This preserves starter
+            // diversity even when one route has a temporarily lower score.
+            foreach (var group in groups)
+            {
+                if (selected.Count >= width) break;
+                var first = group.First();
+                selected.Add(first);
+                seenContinuations.Add(DevelopmentFirstKey(first) + "/" + DevelopmentStateKey(first, identities));
+            }
+            // Spend remaining slots in score order, but only when the state adds
+            // a distinct resource/board continuation under that same root.
+            foreach (var state in ordered)
+            {
+                if (selected.Count >= width) break;
+                if (selected.Contains(state)) continue;
+                var key = DevelopmentFirstKey(state) + "/" + DevelopmentStateKey(state, identities);
+                if (!seenContinuations.Add(key)) continue;
+                selected.Add(state);
+            }
+            return selected;
         }
 
         internal SummonPlan PlanMainSummons(IList<ClientCard> normals, IList<ClientCard> specials) =>

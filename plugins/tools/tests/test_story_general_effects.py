@@ -85,6 +85,66 @@ class GeneralEffectReaderTests(unittest.TestCase):
                 str(cid*16+1),str(new_id*16+1)).replace(str(cid+1),str(new_id+1)).replace(str(cid),str(new_id))
             self.assertEqual(old_data,json.dumps(clone.read(),sort_keys=True),cid)
 
+    def test_empty_main_search_and_optional_draw_are_semantic(self):
+        for cid in (93000101,93000102):
+            old=self.real(63166095)
+            clone=self.reader(old.script.replace('63166095',str(cid)),cid,2)
+            p=clone.read()[0]
+            self.assertTrue(p['EmptyMain'])
+            self.assertEqual((p['BonusDraw'],p['DrawMinimum'],p['DrawGraveType']),(1,3,2))
+            self.assertFalse(self.reader(clone.script.replace('GetSequence()<5','GetSequence()<4'),cid,2).read())
+            self.assertFalse(self.reader(clone.script.replace('Duel.Draw(tp,1','Duel.Draw(1-tp,1'),cid,2).read())
+            self.assertFalse(self.reader(clone.script.replace('Duel.Draw(tp,1,REASON_EFFECT)',
+                'Duel.Draw(tp,1,REASON_EFFECT) Duel.SetLP(tp,100)'),cid,2).read())
+
+    def test_delayed_search_and_summon_limit_survive_renaming(self):
+        for cid in (93000201,93000202):
+            old=self.real(90673288)
+            script=old.script.replace('90673288',str(cid))
+            clone=self.reader(script,cid,self.types[90673288])
+            p=clone.read()[0]
+            self.assertTrue(p['EndPhase'] and p['ArrivalTurnOnly'] and p['ExcludeGraveName'])
+            self.assertEqual(extract(clone)['SummonOnceKey'],cid)
+            self.assertFalse(self.reader(script.replace('EVENT_SPSUMMON_SUCCESS','EVENT_DAMAGE'),cid,self.types[90673288]).read())
+            self.assertFalse(self.reader(script.replace('GetFlagEffect('+str(cid)+')~=0',
+                'GetFlagEffect('+str(cid+1)+')~=0'),cid,self.types[90673288]).read())
+
+    def test_arrival_flag_and_banish_cost_are_parameters(self):
+        for old_id in (53251824,83236601,27780618,63184227):
+            old=self.real(old_id); cid=93000301
+            clone=self.reader(old.script.replace(str(old_id),str(cid)),cid,self.types[old_id])
+            self.assertTrue(clone.read(),old_id)
+        self.assertTrue(self.real(53251824).read()[0]['ArrivalTurnOnly'])
+        self.assertFalse(self.real(53251824,lambda s:s.replace('SetLabel(53251824)','SetLabel(53251825)')).read())
+        search=self.real(27780618).read()[-1]
+        self.assertEqual((search['Cost'],search['CostFrom']),('BanishResource',16))
+        for replacement in ('POS_FACEDOWN','REASON_EFFECT'):
+            changed=self.real(27780618,lambda s:s.replace('POS_FACEUP' if replacement=='POS_FACEDOWN' else 'REASON_COST',replacement)).read()
+            self.assertFalse(any(p.get('Cost')=='BanishResource' for p in changed))
+        self.assertTrue(self.real(63184227).read()[0]['OwnTributeTrigger'])
+        self.assertFalse(self.real(63184227,lambda s:s.replace('IsPreviousControler(tp)','IsPreviousControler(1-tp)')).read())
+
+    def test_attribute_summon_lock_is_not_discarded(self):
+        for attribute,mask in [('ATTRIBUTE_DARK',32),('ATTRIBUTE_LIGHT',16),('ATTRIBUTE_WATER',2)]:
+            reader=self.real(87321742,lambda s:s.replace('ATTRIBUTE_DARK',attribute))
+            self.assertEqual(reader.read()[0]['AllowedAttribute'],mask)
+        self.assertFalse(self.real(87321742,lambda s:s.replace('return not c:IsAttribute(ATTRIBUTE_DARK)',
+            'return not c:IsAttribute(ATTRIBUTE_DARK) or c:IsRace(RACE_DRAGON)')).read())
+
+    def test_multiple_summon_locks_cannot_collapse_to_one(self):
+        extra='''
+ local other=Effect.CreateEffect(c)
+ other:SetType(EFFECT_TYPE_FIELD)
+ other:SetCode(EFFECT_CANNOT_SPECIAL_SUMMON)
+ other:SetTargetRange(1,0)
+ other:SetTarget(s.otherlimit)
+ Duel.RegisterEffect(other,tp)
+'''
+        script=self.real(87321742).script.replace(':SetCode(EFFECT_CANNOT_SPECIAL_SUMMON)',
+            ':SetCode(EFFECT_CANNOT_SPECIAL_SUMMON)'+extra)
+        script+='\nfunction s.otherlimit(e,c) return c:IsRace(RACE_DRAGON) end\n'
+        self.assertFalse(self.reader(script,93000321,self.types[87321742]).read())
+
     def test_life_cost_is_a_parameter(self):
         for amount in (300,700,1200):
             ps=self.real(77202120,lambda s:s.replace('700',str(amount))).read()

@@ -18,6 +18,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         private bool GraveReplacementActive() => duel.Turn <= shifterThroughTurn ||
             Bot.GetSpells().Concat(Enemy.GetSpells()).Concat(Bot.GetMonsters()).Concat(Enemy.GetMonsters()).Any(c =>
                 c.IsFaceup() && !c.IsDisabled() && (Facts(c).GraveRedirect || c.Controller == 1 && Facts(c).OpponentGraveRedirect));
+        internal bool DestructionCanReachGrave => !GraveReplacementActive();
         internal bool BattleDamageBlocked => noDamageToEnemy || duel.Turn <= peaceThroughTurn;
         internal bool OwnBattleDamageBlocked => noDamageToBot || duel.Turn <= peaceThroughTurn;
 
@@ -68,6 +69,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (previous == (int)CardLocation.SpellZone && current != previous)
             { usedComboInstances.Remove(card); spellActivationTurns.Remove(card); developmentCacheKey = summonCacheKey = null; }
             if (previous != (int)CardLocation.MonsterZone || current == previous) return;
+            summonedThisTurn.Remove(card);
             exhaustedFaceupInteractions.Remove(card);
             temporaryDevelopmentBodies.Remove(card);
             bodyExtraSetcodes.Remove(card);

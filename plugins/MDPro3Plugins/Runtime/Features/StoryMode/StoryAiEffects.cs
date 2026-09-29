@@ -11,7 +11,7 @@ namespace MDPro3.Plugins.Features.StoryMode
 {
     public abstract partial class StoryLuckyExecutor
     {
-        internal enum EffectPurpose { Unknown, Safe, TargetRemoval, TargetNegate, EnemyRemoval, BoardWipe, Negate, LinkAttack, LinkEquip, RevivalSwap, LinkBanishCost, FairyTribute, QuickLink, ReturnForBody, StopAttack, TemporaryPair, TemporaryHandRemoval, RecycleBanished, ChangeLevel, BattleDebuff, OverlayModes, Draw, BalanceField }
+        internal enum EffectPurpose { Unknown, Safe, TargetRemoval, TargetNegate, EnemyRemoval, BoardWipe, Negate, LinkAttack, LinkEquip, RevivalSwap, LinkBanishCost, FairyTribute, QuickLink, ReturnForBody, StopAttack, TemporaryPair, TemporaryHandRemoval, RecycleBanished, ChangeLevel, BattleDebuff, OverlayModes, Draw, BalanceField, MixedTargetDestruction }
         private sealed class EffectIntent
         {
             internal ClientCard Source, Target, Cost;
@@ -27,6 +27,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             internal ClientCard Partner;
         }
         private EffectIntent effectIntent;
+        private readonly List<EffectIntent> mixedDestructionIntents = new List<EffectIntent>();
         private readonly Dictionary<int, HashSet<int>> accesscodeAttributes = new Dictionary<int, HashSet<int>>();
         private HashSet<int> CostAttributes(ClientCard card)
         {
@@ -81,13 +82,52 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (!intent.NonTargeting && intent.Purpose != EffectPurpose.EnemyRemoval && intent.Purpose != EffectPurpose.LinkBanishCost)
                 targets = targets.Where(c => evaluation.CanTarget(c, intent.Source));
             if (intent.Hint == HintMsg.Destroy) targets = targets.Where(CanDestroyByEffect);
-            if (intent.Hint == HintMsg.Disable) targets = targets.Where(c => c.IsFaceup() && !c.IsDisabled() &&
-                (EnemyChain && c == LastChain || IsOurMain && (c.IsFloodgate() || evaluation.LiveInteraction(c)) || c.IsMonsterShouldBeDisabledBeforeItUseEffect()));
+            if (intent.Hint == HintMsg.Disable) targets = targets.Where(c => c.IsFaceup() && !c.IsDisabled() && StoryAiEvaluation.HasNegatableEffects(c) &&
+                (EnemyChain && c == LastChain || IsOurMain && evaluation.ShouldDisableMonster(c) || c.IsMonsterShouldBeDisabledBeforeItUseEffect()));
             return targets;
         }
 
         private static bool CanDestroyByEffect(ClientCard c) => StoryAiEvaluation.Hidden(c) || c.IsDisabled() ||
             !Regex.IsMatch(c.Data?.Description ?? "", @"cannot be destroyed by (?:battle or )?card effects|不会被(?:战斗[·・和以及]*|战斗以及)?效果破坏|不會被(?:戰鬥[·・和以及]*|戰鬥以及)?效果破壞", RegexOptions.IgnoreCase);
+
+        private float OwnDestructionValue(ClientCard target, EffectIntent intent)
+        {
+            if (target == null || target.Controller != 0 ||
+                (target.Location & intent.TargetLocations) == 0 || !CanDestroyByEffect(target) ||
+                !intent.NonTargeting && !evaluation.CanTarget(target, intent.Source)) return -100000;
+            string text = target.Data?.Description ?? "";
+            var destructionTrigger = Regex.Match(text,
+                @"(?:(?:if|when)\s+(?:this|that)\s+card\s+is\s+destroyed|(?:这|此)张卡(?:被|因)[^。\n①-⑳]{0,24}(?:破坏|破壞)|(?:這|此)張卡(?:被|因)[^。\n①-⑳]{0,24}破壞)[^\n①-⑳]*",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            float board = evaluation.BoardValue(target);
+            float value = destructionTrigger.Success ? (target == intent.Source ? 3000 : 2200) : 0;
+            // A delayed graveyard summon preserves part of this body's value.
+            // Discount the delay and require a properly summoned body and a live
+            // graveyard; never turn a cheated-out Fusion into a free revival.
+            if (destructionTrigger.Success &&
+                MatchesEffect(destructionTrigger.Value, @"special summon|特殊召唤|特殊召喚") &&
+                MatchesEffect(destructionTrigger.Value, @"\b(?:GY|graveyard)\b|墓地"))
+                value = target.IsCanRevive() && evaluation.DestructionCanReachGrave ? board * .75f : 0;
+            if (StoryAiEvaluation.Has(target, CardType.Token)) value += 1100;
+            if (target.IsDisabled()) value += 300;
+            // This is the friendly half of an exchange, not an independent veto.
+            // The opposing removal must cover this loss with a useful margin.
+            return value - board * .9f;
+        }
+
+        private bool PlanMixedTargetDestruction(EffectIntent intent)
+        {
+            var own = Bot.GetMonsters().Concat(Bot.GetSpells())
+                .Where(c => (c.Location & intent.TargetLocations) != 0)
+                .OrderByDescending(c => OwnDestructionValue(c, intent)).FirstOrDefault();
+            var enemy = RemovalTargets(intent)
+                .OrderByDescending(c => RemovalValue(c, intent)).FirstOrDefault();
+            if (own == null || enemy == null || RemovalValue(enemy, intent) <= 0 ||
+                OwnDestructionValue(own, intent) + RemovalValue(enemy, intent) <= 250) return false;
+            intent.Target = own;
+            intent.Partner = enemy;
+            return true;
+        }
 
         private bool EffectAllowed(ClientCard card, int description, out EffectIntent intent)
         {
@@ -133,6 +173,12 @@ namespace MDPro3.Plugins.Features.StoryMode
                     if (intent.Purpose == EffectPurpose.TargetNegate && StoryAiEvaluation.Facts(card).OpponentDamageShield && !StoryDarkRuler()) return false;
                     if (!PlanTacticalCost(intent)) return false;
                     return true;
+                case EffectPurpose.MixedTargetDestruction:
+                    // The first target is explicitly ours, while the second may be
+                    // any card. Never activate unless both sides have a useful,
+                    // legal target; this prevents the core from filling the second
+                    // mandatory slot with another friendly card.
+                    return PlanMixedTargetDestruction(intent);
                 case EffectPurpose.BoardWipe:
                     bool Affected(ClientCard c) => (c.Location & described.TargetLocations) != 0 &&
                         (described.Fact?.TargetFilter == null || described.Fact.TargetFilter(c)) && CanDestroyByEffect(c);
@@ -148,7 +194,17 @@ namespace MDPro3.Plugins.Features.StoryMode
                     intent.Summon = Bot.ExtraDeck.Where(c => StoryAiEvaluation.Has(c, CardType.Link)).Select(c => evaluation.PlanExtra(c, card))
                         .Where(p => p != null).OrderByDescending(p => p.Gain).FirstOrDefault();
                     return intent.Summon != null;
-                default: return true;
+                default:
+                    // For an unclassified random sweep, an empty opposing field
+                    // offers no removal payoff while risking our completed board.
+                    // Verified search/recruit modes above retain their semantics.
+                    if (intent.Purpose == EffectPurpose.Unknown && Enemy.GetMonsterCount() == 0 && Bot.GetMonsterCount() > 0)
+                    {
+                        string text = card.Data?.Description ?? "";
+                        if (Regex.IsMatch(text, @"(?:toss|flip)[^.\n]*coin|投掷[^。\n]*硬币", RegexOptions.IgnoreCase) &&
+                            Regex.IsMatch(text, @"destroy all monsters you control|自己场上的怪兽全部破坏", RegexOptions.IgnoreCase)) return false;
+                    }
+                    return true;
             }
         }
 
@@ -172,6 +228,11 @@ namespace MDPro3.Plugins.Features.StoryMode
         private void CommitEffect(EffectIntent intent)
         {
             effectIntent = intent;
+            if (intent.Purpose == EffectPurpose.MixedTargetDestruction)
+            {
+                mixedDestructionIntents.RemoveAll(p => p.Source == intent.Source && p.Description == intent.Description);
+                mixedDestructionIntents.Add(intent);
+            }
             if (intent.Purpose == EffectPurpose.ChangeLevel) CommitLevelIntent(intent);
             evaluation.NoteDevelopmentEffect(intent.Source, intent.Description);
             evaluation.NoteInteractionUse(intent.Source, intent.Description);
@@ -187,6 +248,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 var chain = Duel.CurrentChainInfo[solving - 1];
                 if (chain.ActivatePlayer == 0 && chain.RelatedCard != null)
                     return levelChangeIntents.LastOrDefault(p => p.Source == chain.RelatedCard && p.LevelEffect.MatchesDescription(chain.ActivateDescription)) ??
+                        mixedDestructionIntents.LastOrDefault(p => p.Source == chain.RelatedCard && p.Description == chain.ActivateDescription) ??
                         DescribeEffect(chain.RelatedCard, chain.ActivateDescription);
                 return null;
             }
@@ -246,6 +308,32 @@ namespace MDPro3.Plugins.Features.StoryMode
                 CostAttributes(intent.Source).Add(StoryAiEvaluation.Attribute(cost));
                 return new List<ClientCard> { cost };
             }
+            if (intent.Purpose == EffectPurpose.MixedTargetDestruction &&
+                (hint == intent.Hint || hint == HintMsg.Target))
+            {
+                // During resolution SelectingEffect may reconstruct the intent from
+                // the chain link. Keep the activation-time pair so two consecutive
+                // prompts cannot choose the same friendly card twice.
+                if (effectIntent != null && effectIntent.Source == intent.Source &&
+                    effectIntent.Description == intent.Description)
+                    intent = effectIntent;
+                if (intent.Target == null || intent.Partner == null) return cancelable ? new List<ClientCard>() : null;
+                if (min == 2 && max >= 2 && cards.Contains(intent.Target) && cards.Contains(intent.Partner))
+                {
+                    intent.TargetSelections = 2;
+                    return new List<ClientCard> { intent.Target, intent.Partner };
+                }
+                ClientCard chosen = intent.TargetSelections == 0 && cards.Contains(intent.Target)
+                    ? intent.Target : cards.Contains(intent.Partner) ? intent.Partner : null;
+                if (chosen != null && min <= 1 && max >= 1)
+                {
+                    intent.TargetSelections++;
+                    return new List<ClientCard> { chosen };
+                }
+                // A mandatory prompt must still satisfy the core's lower bound,
+                // but never pad it with an unplanned friendly card.
+                if (cancelable) return new List<ClientCard>();
+            }
             if ((intent.Purpose == EffectPurpose.TargetRemoval || intent.Purpose == EffectPurpose.TargetNegate || intent.Purpose == EffectPurpose.EnemyRemoval ||
                 intent.Purpose == EffectPurpose.LinkBanishCost || intent.Purpose == EffectPurpose.FairyTribute) && (hint == intent.Hint || hint == HintMsg.Target))
             {
@@ -265,6 +353,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             base.OnChainEnd();
             AI.SelectNumber(-1);
             effectIntent = null;
+            mixedDestructionIntents.Clear();
             levelChangeIntents.Clear();
             resourceSelection = null;
             CommitExtraPlan(null);
@@ -275,6 +364,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             base.OnNewPhase();
             AI.SelectNumber(-1);
             effectIntent = null;
+            mixedDestructionIntents.Clear();
             levelChangeIntents.Clear();
             resourceSelection = null;
             CommitExtraPlan(null);

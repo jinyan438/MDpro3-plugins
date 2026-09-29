@@ -241,7 +241,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             // story deck could set its traps once and then end every later turn.  Keep
             // the stale-candidate guard while a real chain is resolving.
             if (Duel.LastChainPlayer == 0 && Duel.CurrentChain.Count > 0 && candidate.Location != CardLocation.Grave && candidate.Location != CardLocation.Removed &&
-                !Duel.ChainTargets.Contains(candidate) && !Duel.LastSummonedCards.Contains(candidate)) return false;
+                !Duel.ChainTargets.Contains(candidate) && !Duel.LastSummonedCards.Contains(candidate) &&
+                !(selectingChainResponse && evaluation.ModelledComboTrigger(candidate, description))) return false;
             if (StoryAiEvaluation.Has(candidate, CardType.Field) && candidate.Location == CardLocation.Hand && Bot.SpellZone[5] != null &&
                 Bot.SpellZone[5].Id == candidate.Id) return false;
             if (Duel.Player == 1 && Duel.CurrentChain.Count == 0 && candidate.Location == CardLocation.MonsterZone &&

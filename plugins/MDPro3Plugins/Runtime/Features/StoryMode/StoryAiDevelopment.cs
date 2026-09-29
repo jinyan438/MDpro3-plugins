@@ -41,6 +41,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             internal ClientCard PendingSearch;
             internal ClientCard PendingRecruit;
             internal HashSet<int> HandSummons;
+            internal HashSet<int> SpecialSummons;
             internal HashSet<int> ComboUsed;
             internal HashSet<string> LevelUses;
             internal HashSet<ClientCard> ComboInstances;
@@ -57,6 +58,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             internal ExtraPlan First;
             internal float Credit, Score;
             internal int Depth, Life, DeckCount;
+            internal int AllowedAttributes = -1;
         }
         private sealed class SearchBudget
         {
@@ -75,6 +77,8 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal bool ExtraNotCancelled(ClientCard card) => !cancelledExtras.TryGetValue(card, out var fingerprint) ||
             fingerprint != DevelopmentFingerprint(new ClientCard[0]);
         private readonly HashSet<int> usedDevelopmentEffects = new HashSet<int>();
+        private readonly HashSet<int> usedSpecialSummons = new HashSet<int>();
+        private readonly HashSet<ClientCard> summonedThisTurn = new HashSet<ClientCard>();
         private bool developmentSynchroOnly;
         private readonly string developmentDeckFile;
         private List<int> developmentDeckList;
@@ -105,7 +109,7 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         internal bool KnownOwnDeckContains(int id) => KnownDevelopmentDeck().Any(c => c.Id == id);
 
-        internal void ResetDevelopmentTurn() { ResetResourceTurn(); usedLevelEffects.Clear(); usedDevelopmentEffects.Clear(); usedHandSummons.Clear(); usedComboEffects.Clear(); usedComboInstances.Clear(); usedComboEffectInstances.Clear(); liveFusionNames.Clear(); pendingFusionNames.Clear(); developmentXyzOnly = false; temporaryDevelopmentBodies.Clear(); cancelledExtras.Clear(); developmentSynchroOnly = false; normalSummonSpent = false; developmentCacheKey = summonCacheKey = null; }
+        internal void ResetDevelopmentTurn() { ResetResourceTurn(); developmentAllowedAttributes = -1; usedSpecialSummons.Clear(); summonedThisTurn.Clear(); usedLevelEffects.Clear(); usedDevelopmentEffects.Clear(); usedHandSummons.Clear(); usedComboEffects.Clear(); usedComboInstances.Clear(); usedComboEffectInstances.Clear(); liveFusionNames.Clear(); pendingFusionNames.Clear(); developmentXyzOnly = false; temporaryDevelopmentBodies.Clear(); cancelledExtras.Clear(); developmentSynchroOnly = false; normalSummonSpent = false; developmentCacheKey = summonCacheKey = null; }
         internal void NoteDevelopmentEffect(ClientCard card, int description)
         {
             NoteLevelEffect(card, description);
@@ -173,6 +177,8 @@ namespace MDPro3.Plugins.Features.StoryMode
                 Normals = duel.MainPhase?.SummonableCards.Where(SimpleNormal).Distinct().ToList() ?? new List<ClientCard>(),
                 NormalUsed = normalSummonSpent && duel.MainPhase?.SummonableCards.Count == 0,
                 HandSummons = new HashSet<int>(usedHandSummons),
+                SpecialSummons = new HashSet<int>(usedSpecialSummons),
+                AllowedAttributes = developmentAllowedAttributes,
                 ComboUsed = new HashSet<int>(usedComboEffects.Concat(usedDuelComboEffects)), PendingCombos = new List<Tuple<ClientCard, ComboEffect>>(), XyzOnly = developmentXyzOnly,
                 ComboInstances = new HashSet<ClientCard>(usedComboInstances),
                 ComboEffectInstances = new HashSet<(ClientCard, int)>(usedComboEffectInstances),
@@ -197,6 +203,8 @@ namespace MDPro3.Plugins.Features.StoryMode
                 ActivatedSpells = new HashSet<ClientCard>(state.ActivatedSpells),
                 Reserve = new List<ClientCard>(state.Reserve), Credited = new HashSet<int>(state.Credited),
                 Normals = state.Normals, NormalUsed = state.NormalUsed, HandSummons = new HashSet<int>(state.HandSummons), FirstSummon = state.FirstSummon,
+                SpecialSummons = new HashSet<int>(state.SpecialSummons),
+                AllowedAttributes = state.AllowedAttributes,
                 ComboUsed = new HashSet<int>(state.ComboUsed), PendingCombos = new List<Tuple<ClientCard, ComboEffect>>(state.PendingCombos), XyzOnly = state.XyzOnly,
                 ComboInstances = new HashSet<ClientCard>(state.ComboInstances),
                 ComboEffectInstances = new HashSet<(ClientCard, int)>(state.ComboEffectInstances),
@@ -216,6 +224,16 @@ namespace MDPro3.Plugins.Features.StoryMode
         private float TerminalValue(DevelopmentState state)
         {
             float value = state.Board.Sum(b => BodyValue(b)) + state.Credit;
+            // Delayed advantage belongs to the surviving source, not to the
+            // summon that briefly placed it. Never spend this card in a main-
+            // phase continuation before its actual End Phase trigger resolves.
+            if (duel.Player == 0)
+                foreach (var body in state.Board)
+                    foreach (var effect in ComboProfiles(body.Card).Where(e => e.EndPhase && e.Kind == ComboKind.Search))
+                        if (ComboReady(state, body.Card, effect))
+                            value += ComboPool(state, effect.TargetFrom).Where(c => effect.Filter(ComboView(state, c)) &&
+                                (!effect.ExcludeGraveName || !state.Grave.Any(g => CardIdentity(g) == CardIdentity(c))))
+                                .Select(c => HandCommitment(c)).DefaultIfEmpty(0).Max();
             // Reward a newly gained live interaction equally whether it was made
             // from the Extra Deck or revived, so material-efficient routes win.
             value += state.Board.Where(b => b.Fresh && !b.EffectsBlocked && LiveInteraction(b.Card))
@@ -289,11 +307,25 @@ namespace MDPro3.Plugins.Features.StoryMode
 
         private int DevelopmentPlace(DevelopmentState state, ClientCard card, bool extra, bool coreOffered = false)
         {
+            int summonKey = Facts(card).SummonOnceKey;
+            if (extra && summonKey != 0 && state.SpecialSummons?.Contains(summonKey) == true) return -1;
+            if (extra && !SpecialAttributeAllowed(state, card)) return -1;
             if (usedDevelopmentEffects.Any(id => Facts(id).SummonSets.Length > 0 && !SetAny(card, Facts(id).SummonSets))) return -1;
             int occupied = state.Board.Aggregate(0, (mask, b) => mask | 1 << b.Zone);
-            int main = (~occupied) & 31, linked = LinkedMainZones(state.Board);
-            if (extra && Has(card, CardType.Link))
+            int main = (~occupied) & 31;
+            int linked = LinkedMainZones(state.Board);
+            foreach (var opponent in state.Enemy.Where(c => Has(c, CardType.Link) && c.IsFaceup()))
+                linked |= ((opponent.GetLinkedZones() >> 16) & 31);
+            // Since the 2020 revision, face-down Fusion/Synchro/Xyz monsters
+            // can use any Main Monster Zone. Face-up Pendulums and Links still
+            // need an EMZ or an arrow; MR4 applies that restriction to all extras.
+            bool arrowRequired = extra && duel.IsNewRule && (!duel.IsNewRule2020 || Has(card, CardType.Link) ||
+                Has(card, CardType.Pendulum) && card.IsFaceup());
+            if (arrowRequired)
             {
+                // The two Extra Monster Zones are a shared pair. A player may
+                // use one only while both of their own EMZ are empty; the
+                // opposing mirrored zone can independently block that slot.
                 if ((occupied & 96) == 0)
                 {
                     bool blocked5 = Enemy.MonsterZone[6] != null && state.Enemy.Contains(Enemy.MonsterZone[6]);
@@ -302,14 +334,14 @@ namespace MDPro3.Plugins.Features.StoryMode
                     if (!blocked6) return 6;
                 }
                 main &= linked;
-                // Being offered a Link Summon proves that SOME material set works,
-                // not that every set frees an EMZ or an arrow destination.
-                // Opposing arrows are public information and rotate onto our side.
-                foreach (var opponent in state.Enemy.Where(c => Has(c, CardType.Link) && c.IsFaceup()))
-                    main |= ((~occupied) & 31 & ((opponent.GetLinkedZones() >> 16) & 31));
             }
-            else if ((main & ~linked) != 0) main &= ~linked; // keep arrow destinations free
+            else if ((main & ~linked) != 0) main &= ~linked; // reserve arrows for later Links
             for (int i = 0; i < 5; i++) if ((main & (1 << i)) != 0) return i;
+            if (extra && duel.IsNewRule && !arrowRequired && (occupied & 96) == 0)
+            {
+                if (Enemy.MonsterZone[6] == null || !state.Enemy.Contains(Enemy.MonsterZone[6])) return 5;
+                if (Enemy.MonsterZone[5] == null || !state.Enemy.Contains(Enemy.MonsterZone[5])) return 6;
+            }
             return -1;
         }
 
@@ -395,11 +427,11 @@ namespace MDPro3.Plugins.Features.StoryMode
                         {
                             if (next.DeckCount > 0 && AvailableSynchroDraw(destination))
                             {
-                                next.Credit += ImmediatePayoff(destination);
+                                next.Credit += ImmediatePayoff(destination, next);
                                 next.DeckCount--;
                             }
                         }
-                        else if (next.PendingSearch == null && !next.PendingCombos.Any(p => p.Item1 == destination)) next.Credit += ImmediatePayoff(destination) * .7f;
+                        else if (next.PendingSearch == null && !next.PendingCombos.Any(p => p.Item1 == destination)) next.Credit += ImmediatePayoff(destination, next) * .7f;
                     }
                     if (next.First == null && next.Addition == null && next.FirstSummon == null)
                     {
@@ -450,7 +482,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             {
                 var trigger = ParseDeckTunerTrigger(state.PendingDeckTuner);
                 var choices = state.Reserve.Where(c => !state.Acquired.Contains(c) && c.Location == CardLocation.Deck && trigger.Material.Matches(c) &&
-                    !Has(c, CardType.SpSummon)).GroupBy(c => c.Id).Select(g => g.First()).OrderBy(c => c.Id).ToList();
+                    !Has(c, CardType.SpSummon) && SpecialAttributeAllowed(state, c)).GroupBy(c => c.Id).Select(g => g.First()).OrderBy(c => c.Id).ToList();
                 int count = Math.Min(state.DeckCount, Math.Min(5 - state.Board.Count(b => b.Zone < 5),
                     trigger.DifferentLevels ? choices.Select(Level).Distinct().Count() : 1));
                 var decline = CopyDevelopment(state); decline.PendingDeckTuner = null; decline.Score = TerminalValue(decline);
@@ -533,6 +565,8 @@ namespace MDPro3.Plugins.Features.StoryMode
                 (state.PendingDeckTuner == null ? 0 : key(state.PendingDeckTuner)) + "/" + state.SynchroOnly + "/" + state.Life + "/" +
                 state.DeckCount + "/" + (state.Addition == null ? 0 : RuntimeHelpers.GetHashCode(state.Addition)) + "/" + state.NormalUsed + "/" +
                 string.Join(",", state.HandSummons.OrderBy(i => i)) + "/" + string.Join(",", state.Grave.Select(key).OrderBy(i => i)) + "/" +
+                string.Join(",", state.SpecialSummons.OrderBy(i => i)) + "/" +
+                state.AllowedAttributes + "/" +
                 (state.PendingRecruit == null ? 0 : key(state.PendingRecruit)) + "/" +
                 (state.PendingSearch == null ? 0 : key(state.PendingSearch)) + "/" + string.Join(",", state.Acquired.Select(key).OrderBy(i => i)) + "/" +
                 string.Join(",", state.ResourceActions.Select(key).OrderBy(i => i)) + "/" + string.Join(",", state.ProperlySummoned.Select(key).OrderBy(i => i)) + "/" +
@@ -582,6 +616,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             var text = new StringBuilder().Append(duel.Turn).Append('/').Append(duel.Player).Append('/').Append((int)duel.Phase)
                 .Append('/').Append(Bot.LifePoints).Append('/').Append(Enemy.LifePoints).Append('/').Append(Bot.Deck.Count)
                 .Append('/').Append(duel.MainPhase?.CanBattlePhase);
+            text.Append('/').Append(duel.IsNewRule).Append('/').Append(duel.IsNewRule2020);
             foreach (var c in Bot.GetMonsters().Concat(Bot.GetSpells()).Concat(Enemy.GetMonsters()).Concat(Enemy.GetSpells()).Concat(Bot.Hand)
                 .Concat(Bot.Graveyard).Concat(Bot.Banished).Concat(Bot.ExtraDeck).Concat(Bot.Deck.Where(c => c.Id != 0)))
                 text.Append('|').Append(RuntimeHelpers.GetHashCode(c)).Append(':').Append(c.Id).Append(':').Append((int)c.Location)
@@ -594,6 +629,9 @@ namespace MDPro3.Plugins.Features.StoryMode
             text.Append(" effects ").Append(string.Join(",", usedDevelopmentEffects.OrderBy(i => i))).Append('/').Append(developmentSynchroOnly);
             text.Append(" level uses ").Append(string.Join(",", usedLevelEffects.OrderBy(k => k)));
             text.Append(" hand summons ").Append(string.Join(",", usedHandSummons.OrderBy(i => i)));
+            text.Append(" special summons ").Append(string.Join(",", usedSpecialSummons.OrderBy(i => i)));
+            text.Append(" allowed attributes ").Append(developmentAllowedAttributes);
+            text.Append(" arrivals ").Append(string.Join(",", summonedThisTurn.Select(RuntimeHelpers.GetHashCode).OrderBy(i => i)));
             text.Append(" normal spent ").Append(normalSummonSpent);
             text.Append(" combo ").Append(string.Join(",", usedComboEffects.OrderBy(i => i))).Append('/').Append(developmentXyzOnly);
             text.Append(" fusion names ").Append(string.Join(",", liveFusionNames.Select(p => RuntimeHelpers.GetHashCode(p.Key) + ":" + p.Value)));

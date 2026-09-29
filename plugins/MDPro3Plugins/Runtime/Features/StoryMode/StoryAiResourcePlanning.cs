@@ -30,6 +30,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 foreach (var combo in ComboProfiles(source).Where(e => ComboDescription(source, e, description)))
                 {
                     developmentSynchroOnly |= combo.SynchroOnly; developmentXyzOnly |= combo.XyzOnly;
+                    if (combo.AllowedAttribute != 0) developmentAllowedAttributes &= combo.AllowedAttribute;
                     foreach (var card in cards.Where(c => c.Controller == 0))
                     {
                         if (combo.BanishOnLeave) banishOnLeaveBodies.Add(card);
@@ -47,6 +48,12 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal void NoteNormalCommitment()
         {
             normalSummonSpent = true;
+            developmentCacheKey = summonCacheKey = null;
+        }
+
+        internal void NoteNormalArrival(ClientCard card)
+        {
+            if (card != null) summonedThisTurn.Add(card);
             developmentCacheKey = summonCacheKey = null;
         }
 
@@ -220,7 +227,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 CardLocation origin = state.Grave.Contains(target) ? CardLocation.Grave :
                     InDevelopmentHand(state, target) ? CardLocation.Hand : CardLocation.Deck;
                 if (origin == CardLocation.Deck && state.DeckCount <= 0) continue;
-                if (!effect.Search && (Has(target, CardType.SpSummon) || origin == CardLocation.Grave &&
+                if (!effect.Search && (!SpecialAttributeAllowed(state, target) || Has(target, CardType.SpSummon) || origin == CardLocation.Grave &&
                     !target.IsCanRevive() && !state.ProperlySummoned.Contains(target))) continue;
                 int zone = effect.Search ? -1 : DevelopmentPlace(state, target, false);
                 if (!effect.Search && zone < 0) yield break;
@@ -369,6 +376,9 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (action.Action == MainPhaseAction.MainAction.Summon || action.Action == MainPhaseAction.MainAction.SetMonster)
                 evaluation.NoteNormalCommitment();
+            if (action.Action == MainPhaseAction.MainAction.Summon)
+                evaluation.NoteNormalArrival(Duel.MainPhase?.SummonableCards.FirstOrDefault(c =>
+                    c.ActionIndex[(int)MainPhaseAction.MainAction.Summon] == action.Index));
         }
 
         private void CommitResourceRoute(StoryAiEvaluation.SummonPlan route)

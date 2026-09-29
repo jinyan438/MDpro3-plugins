@@ -14,7 +14,7 @@ internal static partial class StoryLocalAiTests
         var failures = new List<string>();
         foreach (Action test in new Action[] { ExtensionScales, ExtensionTiger, ExtensionWolf, ExtensionLayered,
             ExtensionRevolution, ExtensionMaterialZones, ExtensionSearchCopies, ExtensionLinkZones, ExtensionExtraTriggers,
-            ExtensionDance, ExtensionLockOrdering, ExtensionResourceBanish, ExtensionHolyWaterMode, ExtensionMoonMode })
+            ExtensionExtraDeckZones, ExtensionDance, ExtensionLockOrdering, ExtensionResourceBanish, ExtensionHolyWaterMode, ExtensionMoonMode })
         {
             try { test(); }
             catch (Exception e) { failures.Add(test.Method.Name + ": " + (e.InnerException ?? e).Message); }
@@ -180,6 +180,41 @@ internal static partial class StoryLocalAiTests
         initial = CoreInitial(f); CoreInvoke(Evaluation(f), "SpendComboCard", initial, sp, false, false);
         Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", initial, target, true, false) == 5,
             "consuming the occupied EMZ body makes the next Link placement legal");
+    }
+
+    private static void ExtensionExtraDeckZones()
+    {
+        foreach (var type in new[] { CardType.Fusion, CardType.Synchro, CardType.Xyz })
+        {
+            var f = new Fixture();
+            var extra = Card(type: Monster | type, location: CardLocation.Extra, position: CardPosition.FaceDownDefence);
+            var blocker = Card(type: Monster | CardType.Link); f.Bot.MonsterZone[5] = blocker;
+            Set(blocker, "LinkMarker", 0); Set(blocker.Data, "Defense", 0);
+            Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", CoreInitial(f), extra, true, false) == 0,
+                "2020 rules allow an unlinked main zone behind an occupied EMZ: " + type);
+            f.Duel.IsNewRule2020 = false;
+            Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", CoreInitial(f), extra, true, true) == -1,
+                "MR4 still requires an arrow; a core offer cannot legalize every material set: " + type);
+            f.Duel.IsNewRule = false;
+            Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", CoreInitial(f), extra, true, false) == 0,
+                "pre-Link rules allow main zones: " + type);
+        }
+        var g = new Fixture();
+        var arrow = Card(type: Monster | CardType.Link); g.Bot.MonsterZone[0] = arrow;
+        Set(arrow, "LinkMarker", 32); Set(arrow.Data, "Defense", 32);
+        var synchro = Card(type: Monster | CardType.Synchro, location: CardLocation.Extra);
+        Check((int)CoreInvoke(Evaluation(g), "DevelopmentPlace", CoreInitial(g), synchro, true, false) == 2,
+            "unrestricted summons preserve the available arrow for a later Link");
+        for (int i = 0; i < 5; i++) g.Bot.MonsterZone[i] = Card();
+        Check((int)CoreInvoke(Evaluation(g), "DevelopmentPlace", CoreInitial(g), synchro, true, false) == 5,
+            "a non-Link extra can use the EMZ when main zones are full");
+        g.Bot.MonsterZone[5] = Card();
+        Check((int)CoreInvoke(Evaluation(g), "DevelopmentPlace", CoreInitial(g), synchro, true, false) == -1,
+            "an unrestricted extra still cannot claim a second EMZ");
+        g.Bot.MonsterZone[0] = null;
+        var pendulum = Card(type: Monster | CardType.Pendulum | CardType.Synchro, location: CardLocation.Extra);
+        Check((int)CoreInvoke(Evaluation(g), "DevelopmentPlace", CoreInitial(g), pendulum, true, false) == -1,
+            "a face-up extra Pendulum remains subject to arrows under 2020 rules");
     }
 
     private static void ExtensionExtraTriggers()

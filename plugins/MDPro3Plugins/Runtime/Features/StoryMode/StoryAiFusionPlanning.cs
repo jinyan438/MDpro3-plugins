@@ -150,7 +150,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                     QueueDevelopmentSearch(next, destination, false, true);
                     foreach (var effect in ComboProfiles(destination).Where(e => e.SummonTrigger && e != ReadResourceEffect(destination)?.Combo && (e.ExtraSummonTrigger || e.SpecialTrigger)))
                         next.PendingCombos.Add(Tuple.Create(destination, effect));
-                    if (next.Credited.Add(destination.Id) && next.PendingSearch == null && !next.PendingCombos.Any(p => p.Item1 == destination)) next.Credit += ImmediatePayoff(destination) * .7f;
+                    if (next.Credited.Add(destination.Id) && next.PendingSearch == null && !next.PendingCombos.Any(p => p.Item1 == destination)) next.Credit += ImmediatePayoff(destination, next) * .7f;
                     if (root)
                     {
                         var plan = new ExtraPlan { Destination = destination, Materials = materials, Hint = HintMsg.FusionMaterial, Zone = zone };

@@ -96,6 +96,11 @@ internal static unsafe class StoryCoreAiTests
         string chain = solving > 0 && solving <= duel.CurrentChainInfo.Count ? duel.CurrentChainInfo[solving - 1].ActivateId.ToString() : "-";
         trace.WriteLine("SELECT " + (source?.Id ?? 0) + " " + description + " resolving=" + chain + " hint=" + hint +
             " offered=" + Cards(offered) + " chosen=" + (selected == null ? "queued" : Cards(selected)));
+        // Log ownership and zone at the actual prompt. CHAIN_DISABLED alone
+        // misses a field negate aimed at a card with no resolving chain link.
+        if (selected != null && (hint == HintMsg.Disable || hint == HintMsg.Remove || hint == HintMsg.Destroy))
+            trace.WriteLine("INTERACTION-TARGETS " + (source?.Id ?? 0) + " " + description + " resolving=" + chain + " hint=" + hint +
+                " chosen=" + string.Join(",", selected.Select(c => c.Id + ":" + c.Controller + ":" + (int)c.Location)));
     }
     private static void Set(object target, string name, object value)
     {
@@ -186,6 +191,17 @@ internal static unsafe class StoryCoreAiTests
                     trace.WriteLine("BOARD " + Cards(ais[p].Duel.Fields[0].GetMonsters()) + " HAND " + Cards(ais[p].Duel.Fields[0].Hand));
                     trace.WriteLine("LEVELS " + string.Join(",", ais[p].Duel.Fields[0].GetMonsters().Select(c => c.Id + ":" + c.Level + "@" + c.Sequence)));
                 }
+                if (msg == GameMessage.SelectEffectYn && p == 0)
+                {
+                    using (var prompt = new BinaryReader(new MemoryStream(bytes, 2, bytes.Length - 2)))
+                    {
+                        prompt.ReadByte(); int source = prompt.ReadInt32();
+                        prompt.ReadBytes(4); int description = prompt.ReadInt32();
+                        trace.WriteLine("EFFECT-YN " + source + " description=" + description +
+                            " ownUnderAttack=" + ais[p].Duel.Fields[0].UnderAttack +
+                            " enemyUnderAttack=" + ais[p].Duel.Fields[1].UnderAttack);
+                    }
+                }
                 behavior.OnPacket(new BinaryReader(new MemoryStream(bytes)));
             };
             endpoints[outgoing] = bytes =>
@@ -233,6 +249,11 @@ internal static unsafe class StoryCoreAiTests
                 ownAttackStops++;
                 trace.WriteLine("OWN-ATTACK-STOP " + solvingLink.ActivateId);
             }
+            if (msg == GameMessage.AttackDisabled)
+                // This message can arrive after ChainEnd cleared the resolving
+                // link. Record the attack's side independently of attribution.
+                trace.WriteLine("ATTACK-STOP attacker=" + (observed.Fields[1].UnderAttack ? "0" : observed.Fields[0].UnderAttack ? "1" : "unknown") +
+                    " monster=" + (observed.Fields[1].UnderAttack ? observed.Fields[0].BattlingMonster?.Id : observed.Fields[1].BattlingMonster?.Id));
             if (msg == GameMessage.Move && solvingLink?.ActivatePlayer == 0)
             {
                 int movingId = reader.ReadInt32(); int previousPlayer = reader.ReadByte(), previousLocation = reader.ReadByte();

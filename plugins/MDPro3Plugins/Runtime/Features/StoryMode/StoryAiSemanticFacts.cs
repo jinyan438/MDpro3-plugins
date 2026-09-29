@@ -26,7 +26,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             internal EffectLimit[] Limits = new EffectLimit[0];
             internal TacticalFact[] Effects = new TacticalFact[0];
-            internal int MaterialAttack, LinkAttack, ImmunityBonus, ProtectionBonus;
+            internal int MaterialAttack, LinkAttack, ImmunityBonus, ProtectionBonus, SummonOnceKey;
             internal bool FlexibleTuner, GraveRedirect, OpponentGraveRedirect, OpponentDamageShield, BothDamageShield, UniversalRevival;
             internal bool BattleEndBalance;
             internal int[] SummonSets = new int[0];

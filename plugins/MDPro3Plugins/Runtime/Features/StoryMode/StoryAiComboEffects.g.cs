@@ -100,6 +100,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 [1329620] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, DefaultDescription = true, KeyCode = 1329620, SentEffectTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 385) && Has(c, (CardType)1) && c.IsFaceup() && true), TargetFrom = (CardLocation)32, Cost = ComboCost.None, GenericTrigger = true },
 },
+[1357146] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = false, Offset = 0, ExplicitDescription = true, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 18) && Has(c, (CardType)1) && true), CostFrom = (CardLocation)16 },
+},
 [1410324] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 1410324, ConditionFilter = c => (SetAny(c, 251) && Has(c, (CardType)67108928) && c.IsFaceup()), ConditionFrom = (CardLocation)4, ConditionCount = 1, Kind = ComboKind.Self, Cost = ComboCost.None },
 },
@@ -323,6 +326,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [5697558] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, DefaultDescription = true, KeyCode = 5697558, Kind = ComboKind.Search, Filter = c => (Has(c, (CardType)1) && SetAny(c, 237) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None },
+},
+[5763020] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = false, Offset = 0, ExplicitDescription = true, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)4096) && true), CostFrom = (CardLocation)16 },
 },
 [5780210] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
@@ -561,6 +567,7 @@ new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDesc
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, Direct = true, KeyCode = 10807219, Kind = ComboKind.Self, Cost = ComboCost.None },
 },
 [10808715] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 10808715, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 8) && Has(c, (CardType)1) && true), CostFrom = (CardLocation)16 },
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 10808716, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (!((CardIdentity(c) == 10808715)) && SetAny(c, 40968) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)17, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
 [10833828] = new[] {
@@ -581,6 +588,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [11234702] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, DefaultDescription = true, KeyCode = 11234702, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 39) && Level(c) <= 4 && !((CardIdentity(c) == 11234702)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.None, Disabled = true, SpecialTrigger = true, GenericTrigger = true },
+},
+[11248645] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 11248645, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (!((CardIdentity(c) == 11248645)) && SetAny(c, 69) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 69) && true), CostFrom = (CardLocation)16, ExtraSetcode = 69, GenericTrigger = true },
 },
 [11317977] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, Offset = 0, ExplicitDescription = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 223) && Has(c, (CardType)1) && !((CardIdentity(c) == 11317977)) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.Self },
@@ -631,6 +641,9 @@ new ComboEffect { From = (CardLocation)4, Once = false, Offset = 1, ExplicitDesc
 },
 [11908584] = new[] {
 new ComboEffect { From = (CardLocation)8, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 11908584, Kind = ComboKind.Recruit, Filter = c => (Has(c, (CardType)16) && (Race(c) & 8192) != 0 && Level(c) <= 4 && Has(c, CardType.Monster)), TargetFrom = (CardLocation)19, Cost = ComboCost.Discard, CostFilter = c => (Has(c, (CardType)32) && true), CostFrom = (CardLocation)2, Defense = true },
+},
+[11962031] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 11962031, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (Level(c) <= 4 && SetAny(c, 281) && Has(c, (CardType)1) && !((CardIdentity(c) == 11962031)) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, AllowedAttribute = 4, SpecialTrigger = true, GenericTrigger = true },
 },
 [11969228] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 11969228, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Search, Filter = c => (((SetAny(c, 41) && Has(c, (CardType)6)) || (CardIdentity(c) == 62265044)) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, GenericTrigger = false },
@@ -1091,6 +1104,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 [21036656] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 21036656, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (!((CardIdentity(c) == 21036656)) && Has(c, (CardType)4096) && (Race(c) & 3072) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Discard, CostFilter = c => true, CostFrom = (CardLocation)2, SpecialTrigger = true, GenericTrigger = true },
 },
+[21057444] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 21057444, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (true && Has(c, (CardType)1) && SetAny(c, 299)), CostFrom = (CardLocation)16 },
+},
 [21076084] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = false, Offset = 0, ExplicitDescription = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 251) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.BanishSelf },
 },
@@ -1114,6 +1130,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [21414674] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
+},
+[21516908] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 21516908, ConditionFilter = c => (c.IsFaceup() && SetAny(c, 8214) && Has(c, (CardType)4096)), ConditionFrom = (CardLocation)4, ConditionCount = 1, Kind = ComboKind.Self, Cost = ComboCost.None, AllowedAttribute = 8 },
 },
 [21524779] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.Normal, Filter = c => ((Race(c) & 4096) != 0 && (Attribute(c) & 16) != 0 && (Level(c) == 4) && !((CardIdentity(c) == 21524779)) && SimpleNormalBody(c)), TargetFrom = (CardLocation)2, Cost = ComboCost.None, InstanceKey = 1 },
@@ -1308,6 +1327,7 @@ new ComboEffect { From = (CardLocation)10, Once = false, ActivationOnly = true, 
 },
 [25449584] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, DefaultDescription = true, Direct = true, KeyCode = 25449584, Kind = ComboKind.Self, Cost = ComboCost.Tribute, CostFilter = c => ((Race(c) & 1) != 0 && (Attribute(c) & 17) != 0 && c.IsFaceup() && true), CostFrom = (CardLocation)4, CopyTributeAttack = true },
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 25449585, Kind = ComboKind.Send, Filter = c => ((Race(c) & 1) != 0 && (Attribute(c) & 17) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => ((Race(c) & 1) != 0 && true), CostFrom = (CardLocation)16 },
 },
 [25538345] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 25538345, Kind = ComboKind.Send, Filter = c => (!((CardIdentity(c) == 25538345)) && ((SetAny(c, 4315) && Has(c, (CardType)1)) || (SetAny(c, 219) && Has(c, (CardType)6))) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Discard, CostFilter = c => true, CostFrom = (CardLocation)2 },
@@ -1410,6 +1430,7 @@ new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescr
 },
 [27780618] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 27780618, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Send, Filter = c => (SetAny(c, 8) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
+new ComboEffect { From = (CardLocation)4, Once = false, Offset = 1, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.Search, Filter = c => ((CardIdentity(c) == 24094653) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 8) && Has(c, (CardType)1) && true), CostFrom = (CardLocation)16, InstanceKey = 2 },
 },
 [27946124] = new[] {
 new ComboEffect { From = (CardLocation)8, Once = false, Offset = 0, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.Recruit, Filter = c => ((Race(c) & 1024) != 0 && Has(c, (CardType)16) && Level(c) <= 4 && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.None, InstanceKey = 1 },
@@ -1425,6 +1446,7 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [28143384] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 28143384, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Send, Filter = c => ((Race(c) & 8) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, GenericTrigger = true },
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 28143385, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (!((CardIdentity(c) == 28143384)) && (Race(c) & 8) != 0 && Level(c) >= 6 && true), CostFrom = (CardLocation)16 },
 },
 [28151978] = new[] {
 new ComboEffect { From = (CardLocation)2, Kind = ComboKind.PlaceSpell, Once = false },
@@ -1715,6 +1737,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescr
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 32991027, ConditionFilter = c => (SetAny(c, 47) && c.IsFaceup()), ConditionFrom = (CardLocation)4, ConditionCount = 1, Kind = ComboKind.Self, Cost = ComboCost.None, Defense = true },
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 32991028, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 47) && Level(c) <= 5 && Has(c, CardType.Monster)), TargetFrom = (CardLocation)18, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
+[33017655] = new[] {
+new ComboEffect { From = (CardLocation)256, Once = false, Offset = 1, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.DrawDiscard, Filter = c => (Race(c) & 8) != 0, TargetFrom = (CardLocation)2, Cost = ComboCost.BanishResource, CostFilter = c => ((Race(c) & 8) != 0 && true), CostFrom = (CardLocation)16, InstanceKey = 1 },
+},
 [33057951] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = false, ActivationOnly = true, DefaultDescription = true, Kind = ComboKind.Recruit, Filter = c => (Level(c) <= 3 && (Race(c) & 393280) != 0 && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.Self, Defense = true },
 },
@@ -1822,8 +1847,14 @@ new ComboEffect { From = (CardLocation)10, Once = false, ActivationOnly = true, 
 [34904525] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 34904525, Kind = ComboKind.Search, Filter = c => (Has(c, (CardType)6) && true && MentionsCode(c, 25955164) && MentionsCode(c, 62340868) && MentionsCode(c, 98434877)), TargetFrom = (CardLocation)1, Cost = ComboCost.None },
 },
+[34923554] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 34923555, Kind = ComboKind.Search, Filter = c => (true && (CardIdentity(c) == 22866836)), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => ((Race(c) & 32) != 0 && Has(c, (CardType)1) && true), CostFrom = (CardLocation)16 },
+},
 [34926568] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 1, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.Search, Filter = c => (((CardIdentity(c) == 29762407) || (MentionsCode(c, 29762407) && Has(c, (CardType)2))) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, InstanceKey = 1 },
+},
+[34966096] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 34966096, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (true && (Attribute(c) & 48) != 0 && !((CardIdentity(c) == 34966096))), CostFrom = (CardLocation)16, BanishOnLeave = true, Defense = true },
 },
 [35035985] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, DefaultDescription = true, KeyCode = 35035985, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Search, Filter = c => (Has(c, (CardType)524288) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.None, GenericTrigger = false },
@@ -2124,6 +2155,9 @@ new ComboEffect { From = (CardLocation)8, Once = true, Offset = 0, ExplicitDescr
 [41386308] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Send, Filter = c => (Level(c) <= 4 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, GenericTrigger = false },
 },
+[41443249] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 41443249, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 395) && true), CostFrom = (CardLocation)16 },
+},
 [41729254] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 41729254, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 289) && !((CardIdentity(c) == 41729254)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)1, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
@@ -2202,6 +2236,9 @@ new ComboEffect { From = (CardLocation)4, Once = false, Offset = 1, ExplicitDesc
 [43598843] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 4227) && !((CardIdentity(c) == 43598843)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.None, Defense = true, GenericTrigger = true },
 },
+[43735670] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 299) && Has(c, (CardType)1) && !((CardIdentity(c) == 43735670)) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.None, AllowedAttribute = 2, GenericTrigger = true },
+},
 [43944080] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, DefaultDescription = true, Direct = true, KeyCode = 43944080, Kind = ComboKind.Self, Cost = ComboCost.None },
 },
@@ -2258,6 +2295,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [44680819] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
+},
+[44694191] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 44694191, DuelOnce = true, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)2) && true), CostFrom = (CardLocation)16 },
 },
 [44708154] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 44708154, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Search, Filter = c => ((c.IsFaceup() || ((int)c.Location & 16) != 0) && (Race(c) & 1048576) != 0 && (Level(c) == 3)), TargetFrom = (CardLocation)20, Cost = ComboCost.None, GenericTrigger = true },
@@ -2502,6 +2542,12 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 [49249907] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, DefaultDescription = true, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 179) && !((CardIdentity(c) == 49249907)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)1, Cost = ComboCost.None, GenericTrigger = true },
 },
+[49370016] = new[] {
+new ComboEffect { From = (CardLocation)256, Once = false, DefaultDescription = true, SoftOnce = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 369) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)2, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 369) && true), CostFrom = (CardLocation)16, InstanceKey = 1 },
+},
+[49394035] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 49394035, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => ((Race(c) & 16) != 0 && true), CostFrom = (CardLocation)16, BanishOnLeave = true },
+},
 [49430782] = new[] {
 new ComboEffect { From = (CardLocation)8, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 49430783, Kind = ComboKind.Normal, Filter = c => (SetAny(c, 249) && SimpleNormalBody(c)), TargetFrom = (CardLocation)2, Cost = ComboCost.None },
 },
@@ -2554,6 +2600,9 @@ new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDesc
 },
 [50588353] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 50588353, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Recruit, Filter = c => (Has(c, (CardType)4096) && Level(c) <= 3 && Has(c, CardType.Monster)), TargetFrom = (CardLocation)3, Cost = ComboCost.None, Defense = true, Disabled = true, GenericTrigger = true },
+},
+[50596425] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 50596426, Kind = ComboKind.Search, Filter = c => (SetAny(c, 180) && Has(c, (CardType)2) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 180) && Has(c, (CardType)1) && true), CostFrom = (CardLocation)16 },
 },
 [50642380] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 50642380, Kind = ComboKind.Search, Filter = c => (SetAny(c, 369) && Has(c, (CardType)2) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, Life = 600 },
@@ -2674,6 +2723,9 @@ new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDesc
 [53183600] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.Tribute, CostFilter = c => (c.IsFaceup() && (CardIdentity(c) == 15259703)), CostFrom = (CardLocation)12 },
 },
+[53251824] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = false, DefaultDescription = true, SoftOnce = true, ArrivalTurnOnly = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 186) && Level(c) <= 4 && Has(c, CardType.Monster)), TargetFrom = (CardLocation)2, Cost = ComboCost.None, InstanceKey = 1 },
+},
 [53325667] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, DefaultDescription = true, KeyCode = 53325667, SummonTrigger = true, SpecialTrigger = true, Kind = ComboKind.Search, Filter = c => ((CardIdentity(c) == 71645242) && true), TargetFrom = (CardLocation)17, Cost = ComboCost.None, GenericTrigger = true },
 new ComboEffect { From = (CardLocation)16, Once = true, DefaultDescription = true, KeyCode = 53325668, Kind = ComboKind.Recruit, Filter = c => ((SetAny(c, 4387) || ((Race(c) & 8192) != 0 && Has(c, (CardType)8192))) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.BanishSelf },
@@ -2695,6 +2747,9 @@ new ComboEffect { From = (CardLocation)2, Once = true, DefaultDescription = true
 },
 [53776969] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, DefaultDescription = true, KeyCode = 53776969, DuelOnce = true, ConditionFilter = c => ((CardIdentity(c) == 56099748) && c.IsFaceup()), ConditionFrom = (CardLocation)12, ConditionCount = 1, Kind = ComboKind.Self, Cost = ComboCost.None },
+},
+[53871273] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 53871273, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (true && (Attribute(c) & 48) != 0), CostFrom = (CardLocation)16 },
 },
 [53932291] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
@@ -2827,6 +2882,9 @@ new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDesc
 [56063182] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, DefaultDescription = true, KeyCode = 56063182, Kind = ComboKind.Search, Filter = c => (((SetAny(c, 378) && Has(c, (CardType)1)) || (CardIdentity(c) == 56099748)) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None },
 },
+[56161953] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 56161953, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => ((Race(c) & 16777216) != 0 && true && !((CardIdentity(c) == 56161953))), CostFrom = (CardLocation)16 },
+},
 [56187077] = new[] {
 new ComboEffect { From = (CardLocation)2, Kind = ComboKind.PlaceSpell, Once = false },
 new ComboEffect { From = (CardLocation)8, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 56187077, Kind = ComboKind.Search, Filter = c => (SetAny(c, 468) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, Life = 900 },
@@ -2952,6 +3010,9 @@ new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, D
 [58807980] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)2) && true), CostFrom = (CardLocation)2 },
 },
+[58811192] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 58811192, Kind = ComboKind.Normal, Filter = c => (SetAny(c, 181) && SimpleNormalBody(c)), TargetFrom = (CardLocation)2, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 181) && true), CostFrom = (CardLocation)16 },
+},
 [58843503] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, NormalTrigger = true, ConditionFilter = c => (c.IsFaceup() && (CardIdentity(c) == 25247218)), ConditionFrom = (CardLocation)12, ConditionCount = 1, Kind = ComboKind.Recruit, Filter = c => ((CardIdentity(c) == 22754505) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)1, Cost = ComboCost.None, Disabled = true, SpecialTrigger = true, GenericTrigger = true },
 },
@@ -3034,6 +3095,9 @@ new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, D
 },
 [60283232] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 60283232, Kind = ComboKind.Normal, Filter = c => (Level(c) <= 4 && SimpleNormalBody(c)), TargetFrom = (CardLocation)2, Cost = ComboCost.None, SynchroOnly = true },
+},
+[60316373] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 60316373, Kind = ComboKind.Search, Filter = c => (SetAny(c, 118) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.BanishResource, CostFilter = c => ((CardIdentity(c) == 60316373) && true), CostFrom = (CardLocation)16 },
 },
 [60362066] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, DefaultDescription = true, KeyCode = 60362066, SentEffectTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 385) && Has(c, (CardType)4) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.None, GenericTrigger = true },
@@ -3173,11 +3237,17 @@ new ComboEffect { From = (CardLocation)10, Once = false, ActivationOnly = true, 
 [63060238] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 63060238, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => ((CardIdentity(c) == 24094653) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
+[63166095] = new[] {
+new ComboEffect { From = (CardLocation)10, Once = false, ActivationOnly = true, DefaultDescription = true, EmptyMain = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 277) && true && !((CardIdentity(c) == 63166095))), TargetFrom = (CardLocation)1, Cost = ComboCost.Self, BonusDraw = 1, DrawMinimum = 3, DrawGraveType = 2 },
+},
 [63175639] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.Send, Filter = c => (SetAny(c, 4206) && Has(c, (CardType)2) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, InstanceKey = 1 },
 },
 [63176202] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
+},
+[63184227] = new[] {
+new ComboEffect { From = (CardLocation)18, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 63184227, OwnTributeTrigger = true, Kind = ComboKind.Self, Cost = ComboCost.None, BanishOnLeave = true, GenericTrigger = false },
 },
 [63288573] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, SpecialTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 277) && Has(c, (CardType)2) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.None, GenericTrigger = true },
@@ -3261,6 +3331,7 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescr
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, Kind = ComboKind.Recruit, Filter = c => ((CardIdentity(c) == 39552864) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)3, Cost = ComboCost.None, Life = 500 },
 },
 [64753988] = new[] {
+new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, DefaultDescription = true, KeyCode = 64753988, Kind = ComboKind.Search, Filter = c => (SetAny(c, 16531) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)1, ExcludeGraveName = true, Cost = ComboCost.None },
 new ComboEffect { From = (CardLocation)8, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 64753989, Kind = ComboKind.Normal, Filter = c => (SetAny(c, 16531) && SimpleNormalBody(c)), TargetFrom = (CardLocation)2, Cost = ComboCost.None },
 },
 [64765016] = new[] {
@@ -3553,6 +3624,9 @@ new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescr
 [71002019] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 71002020, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 321) && Has(c, (CardType)6) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, GenericTrigger = true },
 },
+[71007216] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 71007216, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 240) && Has(c, (CardType)1) && !((CardIdentity(c) == 71007216)) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, AllowedAttribute = 8, SpecialTrigger = true, GenericTrigger = true },
+},
 [71039903] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 71039903, Kind = ComboKind.Search, Filter = c => (SetAny(c, 221) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.BanishSelf },
 },
@@ -3613,6 +3687,9 @@ new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = tru
 [72006609] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 72006609, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 254) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Discard, CostFilter = c => (((SetAny(c, 268) && Has(c, (CardType)1)) || SetAny(c, 254)) && true), CostFrom = (CardLocation)2, GenericTrigger = true },
 },
+[72060415] = new[] {
+new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, DefaultDescription = true, KeyCode = 72060415, Kind = ComboKind.Search, Filter = c => (Level(c) <= 4 && (Race(c) & 262144) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => ((Attribute(c) & 2) != 0 && true), CostFrom = (CardLocation)16 },
+},
 [72064891] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 72064891, SummonTrigger = true, SpecialTrigger = true, ExtraSummonTrigger = true, Kind = ComboKind.Search, Filter = c => (MentionsCode(c, 66889139) && Has(c, (CardType)6) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.None, GenericTrigger = true },
 },
@@ -3662,6 +3739,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescr
 [73320394] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 73320394, Kind = ComboKind.Search, Filter = c => ((Level(c) == 8) && (Race(c) & 8) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.SelfAndTuner, CostFilter = c => true, CostFrom = (CardLocation)2 },
 },
+[73345237] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 73345237, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)67108864) && true), CostFrom = (CardLocation)16, BanishOnLeave = true },
+},
 [73347079] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, DefaultDescription = true, SoftOnce = true, Kind = ComboKind.Search, Filter = c => ((Level(c) == 4) && (Race(c) & 512) != 0 && (Attribute(c) & 32) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Detach, InstanceKey = 1 },
 },
@@ -3670,6 +3750,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [73490148] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 73490148, Kind = ComboKind.Send, Filter = c => (!((CardIdentity(c) == 73490148)) && SetAny(c, 491) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Self },
+},
+[73490417] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, DefaultDescription = true, KeyCode = 73490418, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => ((Attribute(c) & 48) != 0 && true), CostFrom = (CardLocation)16 },
 },
 [73511233] = new[] {
 new ComboEffect { From = (CardLocation)2, Kind = ComboKind.PlaceSpell, Once = false },
@@ -3950,6 +4033,9 @@ new ComboEffect { From = (CardLocation)2, Once = false, Offset = 0, ExplicitDesc
 [79523365] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 79523365, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 142) && !((CardIdentity(c) == 79523365)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.None, Life = 1000, CannotAttack = true, SpecialTrigger = true, GenericTrigger = false },
 },
+[79531196] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, DefaultDescription = true, KeyCode = 79531196, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)64) && true), CostFrom = (CardLocation)16, Defense = true },
+},
 [79582540] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 79582540, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 311) && ((Level(c) >= 7 && Has(c, (CardType)1)) || (Has(c, (CardType)6) && Has(c, (CardType)131072))) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
@@ -3976,6 +4062,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 },
 [80181649] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, Offset = 0, ExplicitDescription = true, KeyCode = 80181649, Kind = ComboKind.Search, Filter = c => (SetAny(c, 459) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None },
+},
+[80250319] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 209) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.None, AllowedAttribute = 2, GenericTrigger = false },
 },
 [80312545] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, DefaultDescription = true, KeyCode = 80312545, Kind = ComboKind.Search, Filter = c => (((CardIdentity(c) == 6007213 || CardIdentity(c) == 32491822 || CardIdentity(c) == 69890967) || ((MentionsCode(c, 6007213) || MentionsCode(c, 32491822) || MentionsCode(c, 69890967)) && Has(c, (CardType)1))) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None },
@@ -4149,6 +4238,12 @@ new ComboEffect { From = (CardLocation)8, Once = false, DefaultDescription = tru
 [83199011] = new[] {
 new ComboEffect { From = (CardLocation)8, Once = true, ActivationOnly = true, Offset = 0, ExplicitDescription = true, KeyCode = 83199011, Kind = ComboKind.Recruit, Filter = c => (((SetAny(c, 341) && Has(c, (CardType)1)) || (CardIdentity(c) == 68468459)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.Self },
 },
+[83203672] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 83203673, Kind = ComboKind.Search, Filter = c => (SetAny(c, 341) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 341) && Has(c, (CardType)1) && !((CardIdentity(c) == 83203672)) && true), CostFrom = (CardLocation)16 },
+},
+[83236601] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 83236601, ArrivalTurnOnly = true, Kind = ComboKind.Send, Filter = c => (SetAny(c, 186) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.None },
+},
 [83301414] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, DefaultDescription = true, KeyCode = 83301414, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 296) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.Self },
 },
@@ -4250,6 +4345,9 @@ new ComboEffect { From = (CardLocation)8, Once = false, Offset = 0, ExplicitDesc
 [85374678] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 85374678, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 220) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)2, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
+[85482105] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 85482105, Kind = ComboKind.Self, Cost = ComboCost.SendDeck, CostFilter = c => (SetAny(c, 8214) && true && !((CardIdentity(c) == 85482105))), CostFrom = (CardLocation)1, AllowedAttribute = 8 },
+},
 [85753549] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, DefaultDescription = true, KeyCode = 85753550, Kind = ComboKind.Search, Filter = c => ((Race(c) & 8192) != 0 && (Attribute(c) & 32) != 0 && (Level(c) == 7) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Discard, CostFilter = c => true, CostFrom = (CardLocation)2 },
 },
@@ -4287,6 +4385,9 @@ new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDesc
 [86553594] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 2, ExplicitDescription = true, KeyCode = 86553594, Kind = ComboKind.Search, Filter = c => (SetAny(c, 420) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.BanishSelf },
 },
+[86559484] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 86559484, Kind = ComboKind.Recruit, Filter = c => ((CardIdentity(c) == 86559484) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)3, Cost = ComboCost.BanishResource, CostFilter = c => (true && (Race(c) & 8396800) != 0), CostFrom = (CardLocation)16 },
+},
 [86762958] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 2, ExplicitDescription = true, KeyCode = 86762958, Kind = ComboKind.Send, Filter = c => (SetAny(c, 458) && !((CardIdentity(c) == 86762958)) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishSelf },
 },
@@ -4323,6 +4424,9 @@ new ComboEffect { From = (CardLocation)2, Once = false, Offset = 0, ExplicitDesc
 [87292536] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 4109) && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)16, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
 },
+[87321742] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 87321742, ConditionFilter = c => ((Attribute(c) & 32) != 0 && c.IsFaceup()), ConditionFrom = (CardLocation)4, ConditionCount = 1, Kind = ComboKind.Self, Cost = ComboCost.None, AllowedAttribute = 32 },
+},
 [87430304] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
 },
@@ -4346,6 +4450,9 @@ new ComboEffect { From = (CardLocation)8, Once = false, Offset = 0, ExplicitDesc
 },
 [88204302] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = false, ActivationOnly = true, Offset = 0, ExplicitDescription = true, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 8214) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.Self },
+},
+[88210105] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 88210105, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 24) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)1) && SetAny(c, 24) && true), CostFrom = (CardLocation)16 },
 },
 [88225269] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 88225269, Kind = ComboKind.Self, Cost = ComboCost.SendDeck, CostFilter = c => (((SetAny(c, 4167) && Has(c, (CardType)16)) || (CardIdentity(c) == 1264319)) && true), CostFrom = (CardLocation)1, Defense = true },
@@ -4442,6 +4549,9 @@ new ComboEffect { From = (CardLocation)16, Once = true, Offset = 2, ExplicitDesc
 },
 [90432163] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 90432164, Kind = ComboKind.Search, Filter = c => (SetAny(c, 4315) && !((CardIdentity(c) == 90432163)) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishSelf },
+},
+[90673288] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SoftOnce = true, EndPhase = true, ArrivalTurnOnly = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 277) && Has(c, (CardType)2) && true), TargetFrom = (CardLocation)1, ExcludeGraveName = true, Cost = ComboCost.None, InstanceKey = 1, GenericTrigger = true },
 },
 [90681088] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 90681089, SummonTrigger = true, NormalTrigger = true, Kind = ComboKind.Search, Filter = c => (SetAny(c, 129) && true && Has(c, (CardType)6)), TargetFrom = (CardLocation)1, Cost = ComboCost.None, SpecialTrigger = true, GenericTrigger = true },
@@ -4554,6 +4664,9 @@ new ComboEffect { From = (CardLocation)8, Once = true, Offset = 1, ExplicitDescr
 [92373006] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = false, Offset = 0, ExplicitDescription = true, Direct = true, Kind = ComboKind.Self, Cost = ComboCost.None },
 },
+[92418590] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 92418590, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (SetAny(c, 4227) && true && Has(c, (CardType)1)), CostFrom = (CardLocation)16 },
+},
 [92530005] = new[] {
 new ComboEffect { From = (CardLocation)2, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 92530006, ConditionFilter = c => (c.IsFaceup() && SetAny(c, 198)), ConditionFrom = (CardLocation)4, ConditionCount = 1, Kind = ComboKind.Self, Cost = ComboCost.None },
 },
@@ -4649,6 +4762,9 @@ new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescr
 [93850690] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, Offset = 0, ExplicitDescription = true, KeyCode = 93850690, Kind = ComboKind.Recruit, Filter = c => (Has(c, (CardType)1) && Has(c, CardType.Monster) && ((false && (Race(c) & 8388608) != 0) || SetAny(c, 363))), TargetFrom = (CardLocation)16, Cost = ComboCost.Self },
 },
+[93920420] = new[] {
+new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 93920421, Kind = ComboKind.Recruit, Filter = c => (c.IsFaceup() && SetAny(c, 283) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)32, Cost = ComboCost.BanishSelf, AllowedAttribute = 32 },
+},
 [94073244] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 94073244, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 276) && !((CardIdentity(c) == 94073244)) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)2, Cost = ComboCost.None },
 },
@@ -4712,6 +4828,9 @@ new ComboEffect { From = (CardLocation)2, Once = false, DefaultDescription = tru
 },
 [95658967] = new[] {
 new ComboEffect { From = (CardLocation)8, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 95658967, Kind = ComboKind.Search, Filter = c => (((Has(c, (CardType)1) && (Attribute(c) & 16) != 0) || Has(c, (CardType)2)) && Has(c, (CardType)128) && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Discard, CostFilter = c => (Has(c, (CardType)2) && true), CostFrom = (CardLocation)2 },
+},
+[95679145] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 95679145, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => (Has(c, (CardType)75505728) && true), CostFrom = (CardLocation)16 },
 },
 [96157835] = new[] {
 new ComboEffect { From = (CardLocation)4, Once = false, Offset = 0, ExplicitDescription = true, SoftOnce = true, Kind = ComboKind.Recruit, Filter = c => ((Race(c) & 512) != 0 && (Level(c) == 4) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)1, Cost = ComboCost.Detach, InstanceKey = 1 },
@@ -4807,6 +4926,9 @@ new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescr
 [98431356] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 98431356, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 4315) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)16, Cost = ComboCost.BanishSelf, BanishOnLeave = true },
 },
+[98439949] = new[] {
+new ComboEffect { From = (CardLocation)4, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 98439950, Kind = ComboKind.Search, Filter = c => (true && (CardIdentity(c) == 96462121)), TargetFrom = (CardLocation)1, Cost = ComboCost.BanishResource, CostFilter = c => ((Race(c) & 32) != 0 && Has(c, (CardType)1) && true), CostFrom = (CardLocation)16 },
+},
 [98567237] = new[] {
 new ComboEffect { From = (CardLocation)10, Once = true, ActivationOnly = true, Offset = 0, ExplicitDescription = true, KeyCode = 98567237, Kind = ComboKind.Search, Filter = c => ((Race(c) & 8) != 0 && (Attribute(c) & 16) != 0 && true), TargetFrom = (CardLocation)1, Cost = ComboCost.Self, AfterDiscard = true },
 },
@@ -4833,6 +4955,9 @@ new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescr
 },
 [99049589] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 99049589, Kind = ComboKind.Recruit, Filter = c => (SetAny(c, 169, 195) && Has(c, CardType.Monster)), TargetFrom = (CardLocation)2, Cost = ComboCost.BanishSelf },
+},
+[99054885] = new[] {
+new ComboEffect { From = (CardLocation)2, Once = true, Offset = 0, ExplicitDescription = true, KeyCode = 99054885, Kind = ComboKind.Self, Cost = ComboCost.BanishResource, CostFilter = c => ((CardIdentity(c) == 64734921) && true), CostFrom = (CardLocation)16 },
 },
 [99161253] = new[] {
 new ComboEffect { From = (CardLocation)16, Once = true, Offset = 1, ExplicitDescription = true, KeyCode = 99161254, Kind = ComboKind.Search, Filter = c => (SetAny(c, 441) && Level(c) >= 5 && Has(c, (CardType)1) && true), TargetFrom = (CardLocation)17, Cost = ComboCost.BanishSelf },

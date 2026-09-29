@@ -67,7 +67,7 @@ internal static partial class StoryLocalAiTests
         internal ClientField Enemy => Duel.Fields[1];
         internal Fixture(string deckFile = null)
         {
-            Duel = new Duel { Turn = 2, Player = 0, Phase = DuelPhase.Main1, MainPhase = new MainPhase() };
+            Duel = new Duel { Turn = 2, Player = 0, Phase = DuelPhase.Main1, MainPhase = new MainPhase(), IsNewRule = true, IsNewRule2020 = true };
             foreach (var field in Duel.Fields) { field.Init(30, 0); field.LifePoints = 8000; }
             AI = (GameAI)FormatterServices.GetUninitializedObject(typeof(GameAI));
             foreach (var field in typeof(GameAI).GetFields(BindingFlags.Instance | BindingFlags.NonPublic))

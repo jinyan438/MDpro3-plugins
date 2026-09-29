@@ -97,7 +97,7 @@ namespace MDPro3.Plugins.Features.StoryMode
                 if (budget.Exhausted) yield break;
                 // The core still decides revival legality. Do not predict a summon of
                 // a restricted monster from deck/hand, or an improperly summoned boss.
-                if (Has(card, CardType.SpSummon) || trigger.Source == CardLocation.Grave && !card.IsCanRevive() && !state.ProperlySummoned.Contains(card) ||
+                if (!SpecialAttributeAllowed(state, card) || Has(card, CardType.SpSummon) || trigger.Source == CardLocation.Grave && !card.IsCanRevive() && !state.ProperlySummoned.Contains(card) ||
                     trigger.Source == CardLocation.Deck && state.DeckCount <= 0) continue;
                 int zone = DevelopmentPlace(state, card, false);
                 if (zone < 0) yield break;

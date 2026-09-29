@@ -59,7 +59,8 @@ namespace MDPro3.Plugins.Features.StoryMode
                 if (!materials.Contains(ip) || !ValidMaterials(destination, recipe, materials, c => state.Board.Any(b => b.Card == c && b.FromExtra))) continue;
                 // An opponent-turn conversion still needs a legal destination
                 // after THESE materials leave, just like a Main Phase Link Summon.
-                var remaining = new DevelopmentState { Board = state.Board.Where(b => !materials.Contains(b.Card)).ToList(), Enemy = state.Enemy };
+                var remaining = new DevelopmentState { Board = state.Board.Where(b => !materials.Contains(b.Card)).ToList(), Enemy = state.Enemy,
+                    SpecialSummons = state.SpecialSummons, AllowedAttributes = state.AllowedAttributes };
                 if (DevelopmentPlace(remaining, destination, true) >= 0) return true;
             }
             return false;

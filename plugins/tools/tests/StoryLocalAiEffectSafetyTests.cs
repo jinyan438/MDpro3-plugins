@@ -69,6 +69,62 @@ internal static partial class StoryLocalAiTests
             f.Bot.BattlingMonster = utopia; f.Enemy.UnderAttack = true;
             Check(!f.AI.OnSelectEffectYn(utopia, utopia.Id * 16), "do not negate our direct attack");
         });
+        foreach (int id in new[] { 84013237, 63180841 })
+            foreach (bool direct in new[] { false, true })
+                test("generic trigger prompt preserves our attack " + id + "/" + direct, () =>
+                {
+                    var f = new Fixture(); f.Duel.Phase = DuelPhase.BattleStep;
+                    var source = InteractionCard(id); source.Overlays.Add(100001);
+                    f.Bot.MonsterZone[0] = source;
+                    f.Bot.BattlingMonster = Card(3000); f.Enemy.UnderAttack = true;
+                    if (!direct) f.Enemy.BattlingMonster = Card(1500, controller: 1);
+                    Check(!f.AI.OnSelectEffectYn(source, -1),
+                        "the core's unspecified trigger prompt must not bypass attack-negation safety");
+                });
+        foreach (int id in new[] { 84013237, 63180841 })
+            foreach (int side in new[] { 0, 1 })
+                test("generic attack trigger retains meaningful protection " + id + "/" + side, () =>
+                {
+                    var f = new Fixture(); f.Duel.Phase = DuelPhase.BattleStep; f.Duel.Player = side;
+                    var source = InteractionCard(id); source.Overlays.Add(100001);
+                    f.Bot.MonsterZone[0] = source;
+                    f.Bot.BattlingMonster = Card(1000); f.Enemy.BattlingMonster = Card(3000, controller: 1);
+                    f.Bot.UnderAttack = side == 1; f.Enemy.UnderAttack = side == 0;
+                    Check(f.AI.OnSelectEffectYn(source, -1),
+                        "resolve the generic trigger while preventing a visible battle loss");
+                });
+        test("generic attack trigger requires a live attack", () =>
+        {
+            var f = new Fixture(); var source = InteractionCard(84013237);
+            f.Bot.MonsterZone[0] = source; f.Duel.Phase = DuelPhase.BattleStep;
+            f.Bot.BattlingMonster = Card(1000); f.Enemy.BattlingMonster = Card(3000, controller: 1);
+            Check(!f.AI.OnSelectEffectYn(source, -1), "stale battling monsters alone do not justify activation");
+        });
+        test("alternate artwork shares the verified optional attack trigger", () =>
+        {
+            var f = new Fixture(); f.Duel.Phase = DuelPhase.BattleStep;
+            var source = Card(2500, 2000, Monster | CardType.Xyz, id: 84013238);
+            Set(source.Data, "Alias", 84013237); f.Bot.MonsterZone[0] = source;
+            f.Bot.BattlingMonster = source; f.Enemy.UnderAttack = true;
+            Check(!f.AI.OnSelectEffectYn(source, -1), "artwork aliases cannot bypass attack safety");
+        });
+        var attackProfiles = (IDictionary)typeof(TestStoryExecutor).BaseType.Assembly
+            .GetType("MDPro3.Plugins.Features.StoryMode.StoryAiScriptEffects")
+            .GetField("attackTriggers", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+        foreach (DictionaryEntry entry in attackProfiles)
+            test("generated generic attack trigger " + entry.Key, () =>
+            {
+                var profile = ((int Description, int Origin))entry.Value;
+                var location = (CardLocation)profile.Origin;
+                var f = new Fixture(); f.Duel.Phase = DuelPhase.BattleStep;
+                var source = Card(id: (int)entry.Key, type: location == CardLocation.MonsterZone ? Monster : CardType.Trap,
+                    location: location);
+                if (location == CardLocation.MonsterZone) f.Bot.MonsterZone[0] = source;
+                else f.Bot.SpellZone[0] = source;
+                f.Bot.BattlingMonster = Card(3000); f.Enemy.UnderAttack = true;
+                Check(!f.AI.OnSelectEffectYn(source, -1),
+                    "every generated optional attack trigger protects a profitable own attack");
+            });
         test("damage prevention preserves attack negation", () =>
         {
             var f = new Fixture(); ResolveResource(f, 33782437, 0); f.Duel.Player = 1; f.Duel.Phase = DuelPhase.BattleStep;
@@ -186,6 +242,258 @@ internal static partial class StoryLocalAiTests
             var f = new Fixture(); var source = Card(text: "Target 1 monster in your GY; Special Summon it, but negate its effects.");
             Check(f.AI.OnSelectEffectYn(source, source.Id * 16), "a revived body's negated effects are part of a beneficial summon");
         });
+        foreach (var sourceType in new[] { CardType.Spell, CardType.Trap, Monster })
+            test("mixed target negation has an opposing target " + sourceType, () =>
+            {
+                var f = new Fixture();
+                var source = Card(type: sourceType, location: sourceType == Monster ? CardLocation.MonsterZone : CardLocation.Hand,
+                    text: "Target 1 face-up monster on the field; that target gains 400 ATK, but its effects are negated until the end of this turn.");
+                var own = Card(2400);
+                f.Bot.MonsterZone[0] = own;
+                Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "a mixed stat/negation effect does not select our own monster when no enemy target exists");
+                var enemy = Card(2800, controller: 1,
+                    text: "If this card is Normal Summoned: add 1 card from your Deck to your hand.");
+                f.Enemy.MonsterZone[0] = enemy;
+                Check(f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "the same generic effect remains available against a live opposing monster");
+                Check(f.AI.OnSelectCard(new[] { own, enemy }, 1, 1, HintMsg.Target, false).Single() == enemy,
+                    "activation and resolution use the same opposing target policy");
+            });
+        test("localized target negation has an opposing target", () =>
+        {
+            var f = new Fixture();
+            var source = Card(type: CardType.Spell, location: CardLocation.Hand,
+                text: "以场上1只表侧表示怪兽为对象；那只怪兽的效果无效化。");
+            f.Bot.MonsterZone[0] = Card(2400);
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "localized target negation does not harm our only monster");
+            var enemy = Card(2800, controller: 1,
+                text: "If this card is Normal Summoned: add 1 card from your Deck to your hand."); f.Enemy.MonsterZone[0] = enemy;
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "localized target negation can answer an opposing monster");
+            Check(f.AI.OnSelectCard(new[] { f.Bot.MonsterZone[0], enemy }, 1, 1, HintMsg.Target, false).Single() == enemy,
+                "localized target negation selects the opposing monster");
+        });
+        test("script-identified field negation never targets itself", () =>
+        {
+            var f = new Fixture();
+            var source = Card(id: 23204029, type: Monster,
+                text: "这个卡名在规则上也当作「元素英雄」卡使用。\n①：只要这张卡在怪兽区域存在，这张卡的属性也当作「光」使用。\n②：自己·对方回合1次，以场上1张表侧表示卡为对象才能发动。那张卡的效果直到回合结束时无效。");
+            f.Bot.MonsterZone[0] = source;
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "a target-effect negation with no opposing payoff does not target its source");
+            var enemy = Card(2800, controller: 1,
+                text: "If this card is Normal Summoned: add 1 card from your Deck to your hand.");
+            f.Enemy.MonsterZone[0] = enemy;
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "a script-identified field negation remains available against an opposing effect monster");
+            Check(f.AI.OnSelectCard(new[] { source, enemy }, 1, 1, HintMsg.Disable, false).Single() == enemy,
+                "a field-negation target is always selected from the opposing payoff pool");
+        });
+        foreach (var sourceType in new[] { Monster, CardType.Spell, CardType.Trap })
+            test("normal monster flavour text cannot justify negation " + sourceType, () =>
+            {
+                var f = new Fixture();
+                var source = Card(id: sourceType == Monster ? 23204029 : 0, type: sourceType,
+                    text: "Target 1 face-up card on the field; negate its effects.");
+                if (sourceType == Monster) f.Bot.MonsterZone[0] = source;
+                else { source.Location = CardLocation.SpellZone; f.Bot.SpellZone[0] = source; }
+                f.Bot.MonsterZone[1] = Card(1800, text: "Once per turn: add 1 card from your Deck to your hand.");
+                f.Enemy.MonsterZone[0] = Card(2000, type: CardType.Monster | CardType.Normal, controller: 1,
+                    text: "经遗传因子操作而强化的狼人。原本的和蔼之心已被完全破坏。其力量只为战斗而存在，那个破坏力是无可估量的。");
+                f.Duel.LastSummonedCards.Add(source);
+                Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "flavour text mentioning destruction is not a negatable effect");
+                Check(f.Respond(source) == -1,
+                    "the post-summon quick-effect prompt must not activate using a fictitious enemy target");
+            });
+        foreach (var pair in new[]
+        {
+            new { Id = 93004029, Hint = HintMsg.Disable, Text = "①：这张卡得到500攻击力。\n②：以场上1张表侧表示卡为对象才能发动。那张卡的效果直到回合结束时无效。" },
+            new { Id = 93004030, Hint = HintMsg.Remove, Text = "①：这张卡不能被战斗破坏。\n②：以场上1张表侧表示卡为对象才能发动。那张卡除外。" },
+        })
+            test("unambiguous multi-effect field interaction avoids self target " + pair.Hint, () =>
+            {
+                var f = new Fixture();
+                var source = Card(id: pair.Id, type: Monster, text: pair.Text);
+                f.Bot.MonsterZone[0] = source;
+                Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "a multi-effect field interaction does not spend its only target on our own source");
+                var enemy = Card(2800, controller: 1,
+                    text: "If this card is Normal Summoned: add 1 card from your Deck to your hand.");
+                f.Enemy.MonsterZone[0] = enemy;
+                Check(f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "an unambiguous multi-effect interaction remains usable against an opposing target");
+                Check(f.AI.OnSelectCard(new[] { source, enemy }, 1, 1, pair.Hint, false).Single() == enemy,
+                    "a multi-effect interaction selects the opposing target at resolution");
+            });
+        foreach (var result in new[] { "那些卡除外。", "那些卡的效果无效。" })
+            test("multi-effect interaction preserves mandatory target count " + result, () =>
+            {
+                var f = new Fixture();
+                var source = Card(text: "①：这张卡不能被战斗破坏。\n②：以场上2张表侧表示卡为对象才能发动。" + result);
+                f.Bot.MonsterZone[0] = source;
+                f.Enemy.MonsterZone[0] = Card(2800, controller: 1,
+                    text: "Once per turn: add 1 card from your Deck to your hand.");
+                Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "one enemy cannot justify filling a second compulsory target with a friendly card");
+                f.Enemy.MonsterZone[1] = Card(2500, controller: 1,
+                    text: "Once per turn: add 1 card from your Deck to your hand.");
+                Check(f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "two useful opposing targets satisfy the required count");
+                var selected = f.AI.OnSelectCard(new[] { source, f.Enemy.MonsterZone[0], f.Enemy.MonsterZone[1] }, 2, 2, HintMsg.Target, false);
+                Check(selected.Count == 2 && selected.All(c => c.Controller == 1),
+                    "both mandatory targets remain opposing through selection");
+            });
+        test("text field interaction retains its discard cost", () =>
+        {
+            var f = new Fixture();
+            var source = Card(text: "Discard 1 card, then target 1 face-up card on the field; banish it.");
+            f.Bot.MonsterZone[0] = source;
+            f.Enemy.MonsterZone[0] = Card(2800, controller: 1);
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "recognising a field interaction cannot bypass its discard requirement");
+        });
+        test("field interaction does not borrow another activated paragraph", () =>
+        {
+            var f = new Fixture();
+            var source = Card(text: "①：可以发动。自己抽1张。\n②：以场上1张表侧表示卡为对象才能发动。那张卡除外。");
+            f.Bot.MonsterZone[0] = source;
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "the first drawing effect must not inherit the second effect's harmful target requirement");
+        });
+        test("mixed destruction refuses an own-only board", () =>
+        {
+            var f = new Fixture();
+            var source = Card(type: Monster, text: "If this card is destroyed: Special Summon 1 monster from your GY.\n(Quick Effect): You can destroy both 1 card you control and 1 card on the field.");
+            f.Bot.MonsterZone[0] = source;
+            f.Bot.MonsterZone[1] = Card(1800);
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16 + 1),
+                "a mandatory mixed destruction does not fire when the second target would be ours");
+        });
+        test("localized multi-effect mixed destruction uses its active description", () =>
+        {
+            var f = new Fixture();
+            var source = Card(id: 60461804, type: Monster,
+                text: "①：对方场上的怪兽的攻击力下降。\n②：自己·对方回合可以发动。自己场上1张卡和场上1张卡破坏。\n③：这张卡被战斗·效果破坏的场合才能发动。下个回合的准备阶段，从自己墓地把1只怪兽特殊召唤。");
+            f.Bot.MonsterZone[0] = source; f.Bot.MonsterZone[1] = Card(1800);
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                "a multi-effect description cannot hide an own-board destruction behind offset zero");
+        });
+        test("mixed destruction plans one useful own target and one enemy target", () =>
+        {
+            var f = new Fixture();
+            var source = Card(type: Monster, text: "If this card is destroyed: Special Summon 1 monster from your GY.\n(Quick Effect): You can destroy both 1 card you control and 1 card on the field.");
+            var own = Card(1800);
+            var enemy = Card(2600, controller: 1, text: "If this card is Normal Summoned: add 1 card from your Deck to your hand.");
+            f.Bot.MonsterZone[0] = source; f.Bot.MonsterZone[1] = own; f.Enemy.MonsterZone[0] = enemy;
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16 + 1),
+                "a mixed destruction can convert a concrete destruction trigger while removing an opposing threat");
+            var first = f.AI.OnSelectCard(new[] { own, source, enemy }, 1, 1, HintMsg.Destroy, false).Single();
+            Check(first == source, "the useful friendly destruction target is selected first");
+            var second = f.AI.OnSelectCard(new[] { own, enemy }, 1, 1, HintMsg.Destroy, false).Single();
+            Check(second == enemy, "the second mandatory target is always opposing");
+        });
+        test("mixed destruction keeps its pair during chain resolution", () =>
+        {
+            var f = new Fixture();
+            var source = Card(type: Monster, text: "If this card is destroyed: Special Summon 1 monster from your GY.\n(Quick Effect): You can destroy both 1 card you control and 1 card on the field.");
+            var own = Card(1800);
+            var enemy = Card(2600, controller: 1, text: "If this card is Normal Summoned: add 1 card from your Deck to your hand.");
+            f.Bot.MonsterZone[0] = source; f.Bot.MonsterZone[1] = own; f.Enemy.MonsterZone[0] = enemy;
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16 + 1), "mixed destruction activates before resolution");
+            f.Duel.CurrentChain.Add(source);
+            f.Duel.CurrentChainInfo.Add(new ChainInfo(source, 0, source.Id * 16 + 1));
+            f.Duel.SolvingChainIndex = 1;
+            Check(f.AI.OnSelectCard(new[] { own, source, enemy }, 1, 1, HintMsg.Destroy, false).Single() == source,
+                "resolving prompt keeps the planned friendly trigger target");
+            Check(f.AI.OnSelectCard(new[] { own, enemy }, 1, 1, HintMsg.Destroy, false).Single() == enemy,
+                "resolving second prompt keeps the opposing target");
+        });
+        const string renewableDestruction = "6星以上的「英雄」怪兽＋「命运英雄」怪兽\n这个卡名的②③的效果1回合各能使用1次。\n①：对方场上的怪兽的攻击力下降自己墓地的「英雄」卡数量×200。\n②：自己·对方回合可以发动。自己场上1张卡和场上1张卡破坏。\n③：这张卡被战斗·效果破坏的场合才能发动。下个回合的准备阶段，从自己墓地把1只「命运英雄」怪兽特殊召唤。";
+        foreach (bool untargetable in new[] { false, true })
+            test("renewable mixed destruction trades against an enemy " + untargetable, () =>
+            {
+                var f = new Fixture(); f.Duel.Player = 1;
+                var source = Card(2500, 2100, Monster | CardType.Fusion, id: 60461804, text: renewableDestruction, level: 8);
+                Set(source, "ProcCompleted", 8); f.Bot.MonsterZone[0] = source;
+                var valuable = Card(3500, text: "Once per turn (Quick Effect): negate the activation.");
+                f.Bot.MonsterZone[1] = valuable;
+                var enemy = Card(2600, controller: 1, text: untargetable ? "Cannot be targeted by card effects." : "");
+                f.Enemy.MonsterZone[0] = enemy; f.Chain(enemy, 1);
+                Check(f.Respond(source) == 0, "a useful destruction exchange can sacrifice a recoverable boss");
+                f.Duel.CurrentChain.Add(source); f.Duel.CurrentChainInfo.Add(new ChainInfo(source, 0, source.Id * 16));
+                f.Duel.SolvingChainIndex = 2;
+                Check(f.AI.OnSelectCard(new[] { valuable, source }, 1, 1, HintMsg.Destroy, false).Single() == source,
+                    "use the recoverable body instead of another live boss");
+                Check(f.AI.OnSelectCard(new[] { valuable, enemy }, 1, 1, HintMsg.Destroy, false).Single() == enemy,
+                    "non-targeting destruction selects the opposing half of the trade");
+            });
+        test("destroyed recovery is separate from field destruction", () =>
+        {
+            var f = new Fixture();
+            var source = Card(2500, 2100, Monster | CardType.Fusion, location: CardLocation.Grave,
+                id: 60461804, text: renewableDestruction, level: 8);
+            Set(source, "ProcCompleted", 8); f.Bot.Graveyard.Add(source);
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16 + 1),
+                "the destroyed trigger must schedule revival even when both fields are empty");
+            Check(f.AI.OnSelectCard(new[] { source }, 1, 1, HintMsg.SpSummon, false).Single() == source,
+                "the delayed revival keeps its summon selection policy");
+        });
+        test("renewable destruction still refuses an empty enemy field", () =>
+        {
+            var f = new Fixture();
+            var source = Card(2500, 2100, Monster | CardType.Fusion, id: 60461804, text: renewableDestruction, level: 8);
+            Set(source, "ProcCompleted", 8); f.Bot.MonsterZone[0] = source; f.Bot.MonsterZone[1] = Card(3500);
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16), "recovery alone does not justify destroying two friendly cards");
+        });
+        test("mixed destruction does not trade a premium body for a token", () =>
+        {
+            var f = new Fixture();
+            var source = Card(3500, text: "You can destroy both 1 card you control and 1 card on the field.");
+            f.Bot.MonsterZone[0] = source;
+            f.Enemy.MonsterZone[0] = Card(0, 0, CardType.Monster | CardType.Token, controller: 1);
+            Check(!f.AI.OnSelectEffectYn(source, source.Id * 16), "a very small removal payoff cannot pay for a valuable friendly body");
+        });
+        test("mixed destruction survives an intervening friendly chain link", () =>
+        {
+            var f = new Fixture();
+            var source = Card(2500, 2100, Monster | CardType.Fusion, id: 60461804, text: renewableDestruction, level: 8);
+            Set(source, "ProcCompleted", 8); f.Bot.MonsterZone[0] = source;
+            var own = Card(1800); var enemy = Card(3000, controller: 1);
+            f.Bot.MonsterZone[1] = own; f.Enemy.MonsterZone[0] = enemy;
+            Check(f.AI.OnSelectEffectYn(source, source.Id * 16), "initial destruction exchange is useful");
+            f.Chain(source, 0);
+            var other = Card(location: CardLocation.Grave, text: "Draw 1 card.");
+            f.Bot.Graveyard.Add(other);
+            Check(f.AI.OnSelectEffectYn(other, other.Id * 16), "a second own effect commits another selection context");
+            f.Chain(other, 0); f.Duel.SolvingChainIndex = 1;
+            Check(f.AI.OnSelectCard(new[] { own, source }, 1, 1, HintMsg.Destroy, false).Single() == source,
+                "the first chain link keeps its recoverable friendly choice");
+            Check(f.AI.OnSelectCard(new[] { own, enemy }, 1, 1, HintMsg.Destroy, false).Single() == enemy,
+                "the original pair survives both selection prompts");
+        });
+        foreach (int code in new[] { 60461804, 93561804 })
+            test("mixed trade policy is independent of printed card identity " + code, () =>
+            {
+                var f = new Fixture(); f.Duel.Phase = DuelPhase.End;
+                var source = Card(4500, 2100, Monster | CardType.Fusion, id: code, text: renewableDestruction, level: 8);
+                Set(source, "ProcCompleted", 8); f.Bot.MonsterZone[0] = source;
+                f.Enemy.MonsterZone[0] = Card(3000, controller: 1);
+                Check(f.Respond(source) == 0, "the same renewable exchange works for a changed card identity");
+            });
+        foreach (bool graveRedirect in new[] { false, true })
+            test("unavailable recovery is not valued as a free body " + graveRedirect, () =>
+            {
+                var f = new Fixture();
+                var source = Card(2500, 2100, Monster | CardType.Fusion, id: 60461804, text: renewableDestruction, level: 8);
+                if (graveRedirect) { Set(source, "ProcCompleted", 8); ResolveResource(f, 91800273, 1); }
+                f.Bot.MonsterZone[0] = source;
+                f.Enemy.MonsterZone[0] = Card(2000, controller: 1);
+                Check(!f.AI.OnSelectEffectYn(source, source.Id * 16),
+                    "an unrevivable or grave-replaced boss cannot trade on an invented recovery discount");
+            });
         test("forced harmful effect", () =>
         {
             var f = new Fixture(); var source = InteractionCard(74860293); f.Bot.MonsterZone[0] = source;

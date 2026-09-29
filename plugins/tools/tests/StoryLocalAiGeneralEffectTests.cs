@@ -31,9 +31,189 @@ internal static partial class StoryLocalAiTests
     }
     private static void GeneralEffectRegressions()
     {
-        GeneralSoftEffects(); GeneralSharedEffects(); GeneralTacticalSemantics(); GeneralEffectZones(); GeneralArrival(); GeneralTributeNormal();
+        GeneralSoftEffects(); GeneralSharedEffects(); GeneralTacticalSemantics(); GeneralEffectZones(); GeneralArrival(); GeneralTributeNormal(); GeneralDelayedResources(); GeneralDrawThreshold(); GeneralSummonLimits(); GeneralCostContinuations(); GeneralLocksAndHandTriggers();
         Console.WriteLine("Local AI: anonymous semantic costs, independent/shared counts, resource conservation and effect-zone regressions passed");
     }
+    private static object GeneralSearch(Fixture f, ClientCard source)
+    {
+        var effect = NewSemanticObject(f, "ComboEffect");
+        Set(effect, "From", source.Location); Set(effect, "TargetFrom", CardLocation.Deck);
+        Set(effect, "Kind", Enum.Parse(effect.GetType().GetField("Kind", CoreFlags).FieldType, "Search"));
+        Set(effect, "Once", false); Set(effect, "ExplicitDescription", true);
+        return effect;
+    }
+    private static void GeneralDelayedResources()
+    {
+        var f = new Fixture(); f.Bot.Deck.Clear();
+        var source = Card(100); f.Bot.MonsterZone[5] = source;
+        var target = Card(type: CardType.Spell, location: CardLocation.Deck); f.Bot.Deck.Add(target);
+        var effect = GeneralSearch(f, source);
+        Set(effect, "EndPhase", true); Set(effect, "ArrivalTurnOnly", true); Set(effect, "ExcludeGraveName", true);
+        RegisterCombos(f, source, effect);
+        Func<object, float> value = state => (float)CoreInvoke(Evaluation(f), "TerminalValue", state);
+        float old = value(CoreInitial(f));
+        CoreInvoke(Evaluation(f), "NoteHandSummons", (object)new[] { source });
+        var arrived = CoreInitial(f);
+        Check(value(arrived) > old + 400, "surviving newly summoned source retains a concrete delayed search");
+        Check(CoreStates(Evaluation(f), "ComboSuccessors", arrived, CoreBudget(f)).Count == 0,
+            "End Phase search cannot be spent by main-phase continuation");
+        Check(CoreCards(arrived, "Reserve").Contains(target) && !((HashSet<ClientCard>)CoreField(arrived, "Acquired")).Contains(target),
+            "delayed target is not invented in hand");
+        var spent = CoreInvoke(Evaluation(f), "CopyDevelopment", arrived);
+        CoreInvoke(Evaluation(f), "SpendComboCard", spent, source, false, false);
+        Check(value(spent) == 0, "consuming the source removes its unearned delayed payoff");
+        f.Bot.Graveyard.Add(Card(id: target.Id, type: CardType.Spell, location: CardLocation.Grave));
+        Check(value(CoreInitial(f)) == old, "GY name exclusion removes the blocked delayed target");
+        f.Bot.Graveyard.Clear(); f.Executor.OnNewTurn();
+        Check(value(CoreInitial(f)) == old, "arrival-turn search expires on the next turn");
+    }
+    private static void GeneralDrawThreshold()
+    {
+        foreach (int graveCount in new[] { 2, 3 })
+        {
+            var f = new Fixture(); f.Bot.Deck.Clear();
+            var source = Card(type: CardType.Spell, location: CardLocation.Hand); f.Bot.Hand.Add(source);
+            for (int i = 0; i < 4; i++) f.Bot.Deck.Add(Card(type: CardType.Spell, location: CardLocation.Deck));
+            for (int i = 0; i < graveCount; i++) f.Bot.Graveyard.Add(Card(type: CardType.Spell, location: CardLocation.Grave));
+            var effect = GeneralSearch(f, source);
+            Set(effect, "ActivationOnly", true); Set(effect, "EmptyMain", true);
+            Set(effect, "BonusDraw", 1); Set(effect, "DrawMinimum", 3); Set(effect, "DrawGraveType", (int)CardType.Spell);
+            Set(effect, "Cost", Enum.Parse(effect.GetType().GetField("Cost", CoreFlags).FieldType, "Self"));
+            RegisterCombos(f, source, effect);
+            var next = ComboRoots(f, CoreInitial(f), source, 0).First();
+            Check((int)CoreField(next, "DeckCount") == (graveCount == 3 ? 2 : 3),
+                "draw threshold excludes the resolving activation itself: " + graveCount);
+            Check(((HashSet<ClientCard>)CoreField(next, "Acquired")).Count == 1,
+                "unknown bonus draw never becomes a known extender");
+            f.Bot.MonsterZone[0] = Card();
+            Check(ComboRoots(f, CoreInitial(f), source, 0).Count == 0, "empty-main condition rejects an occupied main zone");
+            f.Bot.MonsterZone[5] = f.Bot.MonsterZone[0]; f.Bot.MonsterZone[0] = null;
+            Check(ComboRoots(f, CoreInitial(f), source, 0).Count > 0, "EMZ occupancy does not block the main-zone condition");
+        }
+    }
+    private static void GeneralSummonLimits()
+    {
+        var f = new Fixture();
+        var first = Card(type: Monster | CardType.Link, level: 1, location: CardLocation.Extra);
+        var second = Card(type: Monster | CardType.Link, level: 1, location: CardLocation.Extra);
+        foreach (var card in new[] { first, second })
+        {
+            var facts = NewSemanticObject(f, "CardFacts"); Set(facts, "SummonOnceKey", 95000111);
+            RegisterSemantic(f, "semanticFacts", card.Id, facts);
+        }
+        var initial = CoreInitial(f); var child = CoreInvoke(Evaluation(f), "CopyDevelopment", initial);
+        CoreInvoke(Evaluation(f), "QueueLevelArrival", child, first, false);
+        Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", child, second, true, false) == -1,
+            "projected summons consume their shared script limit across copies");
+        Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", initial, second, true, false) >= 0,
+            "a child summon limit does not mutate sibling branches");
+        CoreInvoke(Evaluation(f), "NoteHandSummons", (object)new[] { first });
+        Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", CoreInitial(f), second, true, false) == -1,
+            "actual special summon refresh preserves the spent name limit");
+        f.Executor.OnNewTurn();
+        Check((int)CoreInvoke(Evaluation(f), "DevelopmentPlace", CoreInitial(f), second, true, false) >= 0,
+            "new turn restores the special-summon allowance");
+    }
+
+    private static void GeneralCostContinuations()
+    {
+        var f = new Fixture(); f.Bot.Deck.Clear();
+        var source = Card(100); f.Bot.MonsterZone[0] = source;
+        var target = Card(type: CardType.Spell, location: CardLocation.Deck); f.Bot.Deck.Add(target);
+        var effect = GeneralSearch(f, source); Set(effect, "ArrivalTurnOnly", true);
+        Set(effect, "Cost", Enum.Parse(effect.GetType().GetField("Cost", CoreFlags).FieldType, "BanishResource"));
+        Set(effect, "CostFrom", CardLocation.Grave);
+        RegisterCombos(f, source, effect);
+        Check(ComboRoots(f, CoreInitial(f), source, source.Id * 16).Count == 0, "arrival-dependent action cannot invent an old body's timing");
+        CoreInvoke(Evaluation(f), "NoteNormalArrival", source);
+        Check(ComboRoots(f, CoreInitial(f), source, source.Id * 16).Count == 0, "a searched fusion resource still needs its real grave cost");
+        var cost = Card(location: CardLocation.Grave); f.Bot.Graveyard.Add(cost);
+        var child = ComboRoots(f, CoreInitial(f), source, source.Id * 16).Single();
+        Check(!CoreCards(child, "Grave").Contains(cost) && ((HashSet<ClientCard>)CoreField(child, "Acquired")).Contains(target),
+            "banishing a real grave resource opens the searched continuation");
+        CoreInvoke(Evaluation(f), "NoteResourceMove", source, (int)CardLocation.MonsterZone, (int)CardLocation.Grave);
+        Check(ComboRoots(f, CoreInitial(f), source, source.Id * 16).Count == 0, "leaving the field resets arrival-only ignition permission");
+
+        f = new Fixture();
+        var payer = Card(100); f.Bot.MonsterZone[0] = payer;
+        var starter = Card(100, location: CardLocation.Hand); f.Bot.Hand.Add(starter);
+        var follow = Card(100, location: CardLocation.Grave); f.Bot.Graveyard.Add(follow);
+        var summon = GeneralSearch(f, starter);
+        Set(summon, "Kind", Enum.Parse(summon.GetType().GetField("Kind", CoreFlags).FieldType, "Self"));
+        Set(summon, "Cost", Enum.Parse(summon.GetType().GetField("Cost", CoreFlags).FieldType, "Tribute"));
+        RegisterCombos(f, starter, summon);
+        var trigger = GeneralSearch(f, follow);
+        Set(trigger, "Kind", Enum.Parse(trigger.GetType().GetField("Kind", CoreFlags).FieldType, "Self"));
+        Set(trigger, "OwnTributeTrigger", true); Set(trigger, "Once", true); Set(trigger, "BanishOnLeave", true);
+        RegisterCombos(f, follow, trigger);
+        child = ComboRoots(f, CoreInitial(f), starter, starter.Id * 16).Single();
+        Check(((IEnumerable)CoreField(child, "PendingCombos")).Cast<object>().Count() == 1,
+            "a paid tribute queues a distinct real hand/grave extender");
+        var expanded = CoreStates(Evaluation(f), "PendingComboSuccessors", child, CoreBudget(f));
+        Check(expanded.Any(x => ComboBodies(x).Count() == 2 && !CoreCards(x, "Grave").Contains(follow)),
+            "the tribute-triggered extender continues the board without a second normal summon");
+
+        var coin = Card(type: CardType.Spell, location: CardLocation.Hand,
+            text: "Toss a coin. If you call it wrong, destroy all monsters you control.");
+        Check(!CoreEffect(f, coin, 0), "an unknown random sweep does not risk the completed board against an empty opponent");
+    }
+
+    private static void GeneralLocksAndHandTriggers()
+    {
+        var f = new Fixture();
+        var source = Card(100, location: CardLocation.Hand); f.Bot.Hand.Add(source);
+        Set(source, "Attribute", (int)CardAttribute.Dark); Set(source.Data, "Attribute", (int)CardAttribute.Dark);
+        var effect = GeneralSearch(f, source);
+        Set(effect, "Kind", Enum.Parse(effect.GetType().GetField("Kind", CoreFlags).FieldType, "Self"));
+        Set(effect, "AllowedAttribute", (int)CardAttribute.Dark); RegisterCombos(f, source, effect);
+        var state = ComboRoots(f, CoreInitial(f), source, source.Id * 16).Single();
+        var light = Card(100, location: CardLocation.Hand); Set(light, "Attribute", (int)CardAttribute.Light);
+        f.Bot.Hand.Add(light);
+        Check(!(bool)CoreInvoke(Evaluation(f), "SpecialAttributeAllowed", state, light), "attribute lock survives the simulated source summon");
+        var initial = CoreInitial(f);
+        Check((bool)CoreInvoke(Evaluation(f), "SpecialAttributeAllowed", initial, light), "attribute lock does not mutate sibling branches");
+        CoreInvoke(Evaluation(f), "NoteComboResolution", source, source.Id * 16, true);
+        Check((bool)CoreInvoke(Evaluation(f), "SpecialAttributeAllowed", CoreInitial(f), light), "negated resolution does not invent an after-resolution lock");
+        CoreInvoke(Evaluation(f), "NoteComboResolution", source, source.Id * 16, false);
+        Check(!(bool)CoreInvoke(Evaluation(f), "SpecialAttributeAllowed", CoreInitial(f), light), "live resolution persists attribute restriction");
+        Check(CoreInvoke(Evaluation(f), "AddDevelopmentBody", CoreInitial(f), light, true, true, CoreBudget(f)) != null,
+            "a special-summon attribute lock does not prohibit a legal normal summon");
+        var tuner = Card(100, type: Monster | CardType.Tuner, level: 4);
+        Set(tuner, "Attribute", (int)CardAttribute.Dark); f.Bot.MonsterZone[0] = tuner;
+        var boss = Card(4000, type: Monster | CardType.Synchro, level: 8, location: CardLocation.Extra,
+            text: "1 Tuner + 1+ non-Tuner monsters");
+        Set(boss, "Attribute", (int)CardAttribute.Dark); f.Bot.ExtraDeck.Add(boss);
+        Check(DevelopmentBonus(f, light) > 0, "normal-summon evaluation keeps a legal off-attribute bridge into an allowed extra monster");
+        f.Executor.OnNewTurn();
+        Check((bool)CoreInvoke(Evaluation(f), "SpecialAttributeAllowed", CoreInitial(f), light), "new turn clears the temporary lock");
+
+        f = new Fixture(); f.Bot.Deck.Clear();
+        var recruiter = Card(type: Monster | CardType.Synchro, level: 5,
+            text: "1 Tuner + 1 non-Tuner monster\nIf this card is Synchro Summoned: Special Summon as many Tuners as possible with different Levels from your Deck.");
+        f.Bot.MonsterZone[0] = recruiter;
+        var allowed = Card(type: Monster | CardType.Tuner, level: 2, location: CardLocation.Deck);
+        var forbidden = Card(type: Monster | CardType.Tuner, level: 3, location: CardLocation.Deck);
+        Set(allowed, "Attribute", (int)CardAttribute.Dark); Set(forbidden, "Attribute", (int)CardAttribute.Light);
+        f.Bot.Deck.Add(allowed); f.Bot.Deck.Add(forbidden);
+        state = CoreInitial(f); Set(state, "AllowedAttributes", (int)CardAttribute.Dark); Set(state, "PendingDeckTuner", recruiter);
+        var recruits = CoreStates(Evaluation(f), "EffectSuccessors", state, CoreBudget(f));
+        Check(recruits.Any(s => ComboBodies(s).Any(b => CoreField(b, "Card") == allowed)),
+            "simultaneous recruit count uses only attribute-legal levels");
+        Check(recruits.All(s => !ComboBodies(s).Any(b => CoreField(b, "Card") == forbidden)),
+            "an off-attribute deck tuner never becomes a projected body");
+
+        f = new Fixture();
+        f.Bot.MonsterZone[0] = Card(100, type: Monster | CardType.Tuner, level: 4);
+        var follow = Card(100, level: 4, location: CardLocation.Hand); f.Bot.Hand.Add(follow);
+        var trigger = GeneralSearch(f, follow);
+        Set(trigger, "Kind", Enum.Parse(trigger.GetType().GetField("Kind", CoreFlags).FieldType, "Self"));
+        Set(trigger, "OwnTributeTrigger", true); Set(trigger, "Once", true); RegisterCombos(f, follow, trigger);
+        f.Bot.ExtraDeck.Add(Card(3000, type: Monster | CardType.Synchro, level: 8, location: CardLocation.Extra,
+            text: "1 Tuner + 1+ non-Tuner monsters\nWhen your opponent activates a card or effect: negate the activation."));
+        f.Chain(f.Bot.MonsterZone[0], 0);
+        Check(f.Respond(follow) >= 0, "a legal modelled hand trigger may chain to our own starter and complete its conversion");
+    }
+
     private static void GeneralSoftEffects()
     {
         for (int sample = 0; sample < 16; sample++)

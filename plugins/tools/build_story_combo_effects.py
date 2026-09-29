@@ -58,6 +58,7 @@ class Reader:
         self.funcs = functions(self.script)
         self.constants = dict(constants, id=cid, o=1 if cid < 100000000 else 100)
         self.effects = registrations(cid, self.funcs)
+        self.grave_distinct_filters = set()
         self.reason = ''
 
     def number(self, value):
@@ -79,6 +80,12 @@ class Reader:
         if name.startswith('Card.'):
             return self.expression('c:'+name[5:]+'('+args+')', depth+1)
         body = self.body(name).strip()
+        # This predicate depends on the branch's GY, not the printed card. Keep
+        # it as a separate runtime constraint instead of capturing live state.
+        distinct = r'\s+and\s+not\s+Duel.IsExistingMatchingCard\(Card.IsCode,tp,LOCATION_GRAVE,0,1,nil,c:GetCode\(\)\)'
+        if re.search(distinct, body):
+            body = re.sub(distinct, '', body)
+            self.grave_distinct_filters.add(name)
         m = re.fullmatch(r'return\s+(.+?)\s*end', body, re.S)
         if not m: return None
         return self.expression(m[1], depth+1)
@@ -187,6 +194,7 @@ class Reader:
              'DrawDiscard':{'SendtoGrave','Draw'},'Self':{'SpecialSummon','SpecialSummonStep','SpecialSummonComplete'},
              'Recruit':{'SpecialSummon','SpecialSummonStep','SpecialSummonComplete'},'Normal':{'Summon'},'FusionName':set()}
         allowed=base|ops[p['Kind']]
+        if p.get('BonusDraw'): allowed.add('Draw')
         if p.get('AfterDiscard'): allowed |= {'DiscardHand','SendtoGrave'}
         if p.get('Mill'): allowed.add('DiscardDeck')
         if p.get('Life'): allowed.add('Damage')
@@ -229,6 +237,7 @@ class Reader:
                   'Detach': [], 'Self':['SendtoGrave'], 'SelfAndTuner':['SendtoGrave'],
                   'Discard':['DiscardHand'], 'SelfDiscard':['DiscardHand'], 'BanishSelf':[],
                   'BanishSelfDiscard':['DiscardHand','Remove'], 'Tribute':['Release'], 'SendDeck':['SendtoGrave']}
+        expected['BanishResource']=['Remove']
         # A Fusion-name copy sends its selected material as its sole cost.
         if p['Kind']=='FusionName': expected['None']=['SendtoGrave']
         # Activating a normal spell sends it to GY by rule, not via a cost callback.
@@ -260,6 +269,8 @@ class Reader:
                         op=re.sub(r'not Duel.IsEnvironment\([^()]+\)','true',op)
             for guard in re.findall(r'\bif\s+(.+?)\s+then',op,re.S):
                 guard=compact(re.sub(r'\b(?:and|or|not)\b',' & ',guard))
+                if p.get('BonusDraw'):
+                    guard=guard.replace(compact(p['_DrawGuard']), 'Q')
                 # Guards may check completion/relation of the transition, empty
                 # selections and available zones. Arbitrary attack, flag, phase,
                 # environment and opponent predicates are not silently ignored.
@@ -342,7 +353,24 @@ class Reader:
             elif code in ('EVENT_TO_GRAVE','EVENT_MOVE') and 'REASON_EFFECT' in condition:
                 if trigger_condition not in ('returnc:IsReason(REASON_EFFECT)end','returnbit.band(r,REASON_EFFECT)~=0end'): return None
                 p['SentEffectTrigger']=True; p['From']=16; condition=''
-            elif code=='EVENT_RELEASE': p['TributeTrigger']=True; p['From']=16
+            elif code=='EVENT_RELEASE':
+                if 'EFFECT_TYPE_FIELD' in typ:
+                    own=re.fullmatch(r'return\(noteg:IsContains\(c\)orc:IsLocation\(LOCATION_HAND\)\)andeg:IsExists\(([\w.]+),1,nil,tp\)end',trigger_condition)
+                    if not own or compact(self.body(own[1]))!='returnc:IsPreviousLocation(LOCATION_MZONE)andc:IsPreviousControler(tp)end': return None
+                    p['OwnTributeTrigger']=True; condition=''
+                else:
+                    p['TributeTrigger']=True; p['From']=16
+            elif code=='EVENT_PHASE+PHASE_END':
+                p['EndPhase']=True
+                if condition:
+                    flag=re.fullmatch(r'returnc:GetFlagEffect\(([^()]+)\)~=0end', trigger_condition)
+                    if not flag: return None
+                    registration=next((self.body(x.get('Operation')) for x in self.effects
+                        if x.get('Code')=='EVENT_SPSUMMON_SUCCESS' and 'CONTINUOUS' in x.get('Type','')), '')
+                    expected='e:GetHandler():RegisterFlagEffect('+flag[1]+',RESET_EVENT+RESETS_STANDARD+RESET_PHASE+PHASE_END,0,1)end'
+                    if compact(registration)!=expected: return None
+                    p['ArrivalTurnOnly']=True
+                    condition=''
             elif code=='EVENT_MOVE' and 'LOCATION_OVERLAY' in condition and 'REASON_COST' in condition and 'TYPE_XYZ' in condition:
                 if trigger_condition!='returnc:IsReason(REASON_COST)andre:IsActivated()andre:IsActiveType(TYPE_XYZ)andc:IsPreviousLocation(LOCATION_OVERLAY)end': return None
                 p['DetachTrigger']=True; p['From']=16; condition=''
@@ -351,7 +379,17 @@ class Reader:
         if condition:
             s=compact(condition)
             selected=self.selections(condition)
-            if selected and re.fullmatch(r'(?:ifc==nilthenreturntrueendlocaltp=c:GetControler\(\))?returnDuel.IsExistingMatchingCard\(.+\)end',s):
+            empty=re.fullmatch(r'returnnotDuel.IsExistingMatchingCard\(([\w.]+),tp,LOCATION_MZONE,0,1,nil\)end',s)
+            if empty and compact(self.body(empty[1]))=='returnc:GetSequence()<5end':
+                p['EmptyMain']=True
+            elif re.fullmatch(r'returne:GetHandler\(\):GetFlagEffect\(([^()]+)\)>0end',s) and 'aux.sumreg' in self.script:
+                flag=re.fullmatch(r'returne:GetHandler\(\):GetFlagEffect\(([^()]+)\)>0end',s)[1]
+                # aux.sumreg registers exactly the original-code label until
+                # leaving the field or End Phase, for both summon events.
+                if self.number(flag)!=self.cid or not all(x in compact(self.script) for x in
+                    ('SetLabel('+flag+')','SetCode(EVENT_SUMMON_SUCCESS)','SetCode(EVENT_SPSUMMON_SUCCESS)','SetOperation(aux.sumreg)')): return None
+                p['ArrivalTurnOnly']=True
+            elif selected and re.fullmatch(r'(?:ifc==nilthenreturntrueendlocaltp=c:GetControler\(\))?returnDuel.IsExistingMatchingCard\(.+\)end',s):
                 p['ConditionFilter'],p['ConditionFrom']=selected[0][:2]; p['ConditionCount']=1
             elif 'GetMatchingGroupCount' in condition and re.search(r'==\d+\s*end$',condition):
                 a=next(calls(condition,'Duel.GetMatchingGroupCount'),None)
@@ -388,6 +426,7 @@ class Reader:
             pred,loc,name,low,high=pool[0]
             if low not in ('0','1') or high!='1': return None
             p.update(Filter=pred,TargetFrom=loc)
+            p['ExcludeGraveName']=any(n in name for n in self.grave_distinct_filters)
             if kind=='Normal':
                 if not loc&2: return None
                 p['TargetFrom']=2
@@ -402,6 +441,10 @@ class Reader:
             elif 'Duel.ConfirmCards' in cost and cp:
                 p['RevealFilter'],p['RevealFrom']=cp[0][:2]
             elif 'Duel.Remove' in cost and 'Duel.DiscardHand' in cost: p['Cost']='BanishSelfDiscard'
+            elif 'Duel.Remove' in cost and cp:
+                remove=next(calls(cost,'Duel.Remove'),None)
+                if not remove or remove[1:]!=['POS_FACEUP','REASON_COST'] or cp[0][1]!=16: return None
+                p['Cost']='BanishResource'
             elif 'Duel.DiscardHand' in cost: p['Cost']='Discard'
             elif 'Duel.SendtoGrave' in cost and re.search(r':AddCard\((?:c|e:GetHandler\(\))\)',cs) and cp: p['Cost']='SelfAndTuner'
             elif re.search(r'Duel.SendtoGrave\((?:e:GetHandler\(\)|c),',cs): p['Cost']='Self'
@@ -473,11 +516,19 @@ class Reader:
             p['Life']=self.number(damage[1])
         # Limits are parsed from the callback's prohibited destination predicate.
         if 'EFFECT_CANNOT_SPECIAL_SUMMON' in op:
+            # A single projected restriction cannot stand in for several
+            # independently registered locks with different predicates.
+            if compact(op).count(':SetCode(EFFECT_CANNOT_SPECIAL_SUMMON)') != 1: return None
             refs=re.findall(r':SetTarget\(([\w.]+)\)',op)
             limits=[self.body(ref) for ref in refs]
             limit=next((v for v in limits if 'LOCATION_EXTRA' in v),'')
+            attribute_limit=next((re.fullmatch(r'returnnotc:IsAttribute\((ATTRIBUTE_\w+)\)end',compact(v)) for v in limits
+                if re.fullmatch(r'returnnotc:IsAttribute\((ATTRIBUTE_\w+)\)end',compact(v))),None)
             m=re.search(r'not c:IsType\((TYPE_SYNCHRO|TYPE_XYZ)\)',limit)
-            if m:
+            if attribute_limit:
+                if ':SetTargetRange(1,0)' not in compact(op) or ':SetRange(LOCATION_MZONE)' in compact(op): return None
+                p['AllowedAttribute']=self.number(attribute_limit[1])
+            elif m:
                 name='SynchroOnly' if m[1]=='TYPE_SYNCHRO' else 'XyzOnly'
                 if re.search(r'\bc:RegisterEffect\(',op) and ':SetRange(LOCATION_MZONE)' in compact(op):
                     if name!='SynchroOnly': return None
@@ -511,7 +562,19 @@ class Reader:
         # Omitted count limits are explicitly repeatable, rather than the C#
         # historical default of one activation per card name.
         p.setdefault('Once',False)
+        # Terminal valuation only supports a free search from a surviving
+        # monster. Other delayed transitions need their own cost/state model.
+        if p.get('EndPhase') and (kind!='Search' or p['Cost']!='None' or p['From']!=4): return None
+        # Optional draw after a successful search. The unknown top card is a
+        # bounded value/count only; it never becomes a chosen combo resource.
+        if kind=='Search' and 'Duel.Draw' in op:
+            draws=list(calls(op,'Duel.Draw'))
+            guard=re.search(r'Duel.GetMatchingGroupCount\(Card.IsType,tp,LOCATION_GRAVE,0,nil,(TYPE_\w+)\)>=(\d+)', compact(op))
+            if len(draws)!=1 or draws[0][0]!='tp' or self.number(draws[0][1]) not in (1,2) or not guard: return None
+            if 'Duel.SelectYesNo' not in op or op.index('Duel.SendtoHand')>op.index('Duel.Draw'): return None
+            p.update(BonusDraw=self.number(draws[0][1]),DrawMinimum=int(guard[2]),DrawGraveType=self.number(guard[1]),_DrawGuard=guard[0])
         if not self.safe_operations(e,p,op,target,cost): return None
+        p.pop('_DrawGuard',None)
         # Selected target predicates are mandatory for all non-self actions.
         return {k:v for k,v in p.items() if (v is not False or k=='Once') and v is not None}
 
@@ -533,7 +596,7 @@ class Reader:
             found.insert(0,dict(From=2,Kind='PlaceSpell',Once=False))
         for index,p in enumerate(found):
             if p.get('SoftOnce'): p['InstanceKey']=index+1
-            if not any(p.get(k) for k in ('SummonTrigger','MaterialTrigger','TributeTrigger','DetachTrigger','SentEffectTrigger','FusionMaterialTrigger')): continue
+            if not any(p.get(k) for k in ('SummonTrigger','MaterialTrigger','TributeTrigger','OwnTributeTrigger','DetachTrigger','SentEffectTrigger','FusionMaterialTrigger','EndPhase')): continue
             candidates=[]
             for e in self.effects:
                 if 'TRIGGER_O' not in e.get('Type',''): continue

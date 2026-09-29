@@ -11,11 +11,24 @@ namespace MDPro3.Plugins.Features.StoryMode
     {
         private bool ReadScriptEffect(EffectIntent intent)
         {
-            var profile = StoryAiScriptEffects.Find(intent.Description);
+            var profile = StoryAiScriptEffects.Find(intent.Description) ??
+                (intent.Description == -1 ? StoryAiScriptEffects.FindAttackTrigger(intent.Source) : null);
             if (profile == null) return false;
             intent.DiscardCount = (profile.Flags & 32) != 0 ? 1 : 0;
             if (profile.Purpose == StoryAiScriptEffects.Kind.Negate) intent.Purpose = EffectPurpose.Negate;
             else if (profile.Purpose == StoryAiScriptEffects.Kind.StopAttack) intent.Purpose = EffectPurpose.StopAttack;
+            else if (profile.Purpose == StoryAiScriptEffects.Kind.Disable)
+            {
+                intent.Purpose = EffectPurpose.TargetNegate;
+                intent.Hint = HintMsg.Disable;
+                intent.TargetLocations = profile.Locations;
+                if ((profile.Flags & 4) != 0) intent.TargetLocations &= CardLocation.MonsterZone;
+                if ((profile.Flags & 8) != 0) intent.TargetLocations &= CardLocation.SpellZone;
+                intent.FaceupOnly = true;
+                intent.FacedownOnly = (profile.Flags & 2) != 0;
+                intent.OwnOnly = (profile.Flags & 16) != 0;
+                intent.MinimumTargets = profile.Minimum;
+            }
             else
             {
                 intent.Purpose = EffectPurpose.TargetRemoval;

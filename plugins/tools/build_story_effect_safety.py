@@ -41,7 +41,8 @@ def simple_filter(name, funcs):
              'Card.IsAbleToRemove': 0, 'Card.IsAbleToGrave': 0,
              'Card.IsAbleToHand': 0, 'Card.IsAbleToDeck': 0,
              'Card.IsFaceup': 1, 'Card.IsFacedown': 2,
-             'aux.NegateEffectMonsterFilter': 1}
+             'aux.NegateEffectMonsterFilter': 1,
+             'aux.NegateAnyFilter': 1}
     if name in known:
         return known[name]
     body = funcs.get(name, '').strip()
@@ -89,35 +90,45 @@ def classify(effect, funcs):
     flags = simple_filter(filter_name, funcs)
     if own is None or enemy is None or flags is None or own & ~12 or enemy & ~12:
         return None
-    if enemy == 0 or int(minimum) < 1:
+    if own == 0 and enemy == 0 or int(minimum) < 1:
         return None
     # Only pure removal operations: do not infer intent from a single category
     # when the same operation also draws, revives, searches, or grants effects.
     dangerous_extras = r'Duel\.(?:SpecialSummon|Draw|SendtoHand|SendtoDeck|SendtoGrave|Remove|Destroy|Release|ChangePosition|MoveToField|Equip)|RegisterEffect|:AddCard'
     intended = {'Destroy': 'Destroy', 'Banish': 'Remove', 'SendGrave': 'SendtoGrave',
-                'ReturnHand': 'SendtoHand', 'ReturnDeck': 'SendtoDeck', 'Disable': None}[kind]
+                'ReturnHand': 'SendtoHand', 'ReturnDeck': 'SendtoDeck'}.get(kind)
     if kind == 'Disable':
-        # Generic effect-disable scripts commonly also grant attack buffs or
-        # revived-body restrictions. Those need their own semantics.
+        # An on-field target is only an interaction if the operation actually
+        # installs an effect disable. Category alone also covers restrictions
+        # applied to our own summoned body, which must stay outside this reader.
+        if not re.search(r'(?:Duel\.NegateRelatedChain|EFFECT_DISABLE(?:_EFFECT)?)', operation):
+            return None
+        if not re.search(r'\w+:RegisterEffect\(', operation):
+            return None
+    elif not re.search(r'Duel\.' + intended + r'\([^\n]*REASON_EFFECT', operation):
         return None
-    if not re.search(r'Duel\.' + intended + r'\([^\n]*REASON_EFFECT', operation):
-        return None
-    if len(re.findall(r'Duel\.' + intended + r'\(', operation)) != 1:
+    if kind != 'Disable' and len(re.findall(r'Duel\.' + intended + r'\(', operation)) != 1:
         return None
     # Do not silently ignore an indirect payoff in a helper function.
     for name in funcs:
         if re.search(r'\b' + re.escape(name) + r'\b', operation) and simple_filter(name, funcs) is None:
             return None
-    remaining = re.sub(r'Duel\.' + intended + r'\(', 'EffectOperation(', operation)
+    remaining = (re.sub(r'\w+:RegisterEffect\([^\n]*\)', 'DisableEffectRegistration()', operation)
+                 if kind == 'Disable' else re.sub(r'Duel\.' + intended + r'\(', 'EffectOperation(', operation))
     if re.search(dangerous_extras, remaining) or 'REASON_TEMPORARY' in operation:
         return None
     # Conditions may constrain the target set indirectly. Leave them unknown.
     if any(x in target for x in ('Duel.SelectYesNo', 'Duel.SelectOption', 'SetLabelObject')):
         return None
+    # A pure self-only removal has no generic tactical payoff. Preserve that
+    # direction so the runtime can decline it instead of selecting a random
+    # friendly card. Effects that also create a benefit were rejected above.
+    if enemy == 0:
+        flags |= 16
     return (kind, enemy or own, int(minimum), flags)
 
 
-def read_effects(cid, text):
+def registered_effects(cid, text):
     # Line comments, including misleading category words, are not code.
     text = re.sub(r'--\[\[.*?\]\]', '', text, flags=re.S)
     text = re.sub(r'--[^\n]*', '', text)
@@ -136,6 +147,11 @@ def read_effects(cid, text):
             effect = dict(variables[register[1]])
             if re.search(r'EFFECT_TYPE_(?:ACTIVATE|IGNITION|QUICK_[OF]|TRIGGER_[OF])', effect.get('Type', '')):
                 registered.append(effect)
+    return funcs, registered
+
+
+def read_effects(cid, text):
+    funcs, registered = registered_effects(cid, text)
     result = []
     for effect in registered:
         description = re.fullmatch(r'aux.Stringid\((id|\d+),\s*(\d+)\)', effect.get('Description', ''))
@@ -157,14 +173,40 @@ def read_effects(cid, text):
             descriptions.get(f'aux.Stringid(id,{key % 16})', 0) == 1]
 
 
+def read_attack_trigger(cid, text):
+    # MSG_SELECT_EFFECTYN may send 221 rather than the registered description.
+    # Resolve only a unique optional trigger, counting even unclassified ones.
+    # Ignition/quick effects and mandatory self-destruction are separate prompts.
+    _, registered = registered_effects(cid, text)
+    optional = [e for e in registered if 'EFFECT_TYPE_TRIGGER_O' in e.get('Type', '')]
+    if len(optional) != 1:
+        return None
+    effect = optional[0]
+    if effect.get('Code') != 'EVENT_ATTACK_ANNOUNCE':
+        return None
+    origin = location(effect.get('Range', ''))
+    if not origin or origin & ~12:
+        return None
+    description = re.fullmatch(r'aux.Stringid\((id|\d+),\s*(\d+)\)', effect.get('Description', ''))
+    if not description or description[1] not in ('id', str(cid)):
+        return None
+    key = cid * 16 + int(description[2])
+    profile = dict(read_effects(cid, text)).get(key)
+    return (key, origin) if profile and profile[0] == 'StopAttack' else None
+
+
 def generate(scripts, output):
-    profiles, conflicts = {}, set()
+    profiles, conflicts, attack_triggers = {}, set(), {}
     with zipfile.ZipFile(scripts) as archive:
         for name in sorted(archive.namelist()):
             match = re.fullmatch(r'(?:script/)?c(\d+)\.lua', name)
             if not match:
                 continue
-            for key, profile in read_effects(int(match[1]), archive.read(name).decode('utf-8-sig')):
+            cid = int(match[1])
+            text = archive.read(name).decode('utf-8-sig')
+            trigger = read_attack_trigger(cid, text)
+            if trigger: attack_triggers[cid] = trigger
+            for key, profile in read_effects(cid, text):
                 if key in profiles and profiles[key] != profile:
                     conflicts.add(key)
                 profiles[key] = profile
@@ -184,9 +226,16 @@ def generate(scripts, output):
         for i in range(0, len(keys), 8):
             lines.append('                ' + ', '.join(map(str, keys[i:i+8])) + ',')
         lines.append('            });')
-    lines += ['            return result;', '        }', '    }', '}']
+    lines += ['            return result;', '        }',
+              '        private static Dictionary<int, (int Description, int Origin)> BuildAttackTriggers() =>',
+              '            new Dictionary<int, (int Description, int Origin)> {']
+    for cid, (description, origin) in sorted(attack_triggers.items()):
+        if description in profiles:
+            lines.append(f'                [{cid}] = ({description}, {origin}),')
+    lines += ['            };', '    }', '}']
     output.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     print(f'{len(profiles)} exact effect profiles: ' + str(dict(collections.Counter(p[0] for p in profiles.values()))))
+    print(f'{len(attack_triggers)} unambiguous optional attack triggers')
 
 
 if __name__ == '__main__':

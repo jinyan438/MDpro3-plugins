@@ -119,6 +119,9 @@ def extract(reader):
                DefaultDescription=not bool(desc),Trigger='TRIGGER_' in e.get('Type',''),DuelOnce='EFFECT_COUNT_CODE_DUEL' in a[1])
         if p not in limits: limits.append(p)
     if limits: facts['Limits']=limits
+    summon_once=next(calls(reader.body('s.initial_effect') or reader.body(f'c{reader.cid}.initial_effect'),'c:SetSPSummonOnce'),None)
+    if summon_once and len(summon_once)==1 and reader.number(summon_once[0]) is not None:
+        facts['SummonOnceKey']=reader.number(summon_once[0])
     # Passive facts and material-dependent ATK are script parameters.
     if 'EFFECT_NONTUNER' in script: facts['FlexibleTuner']=True
     for e in reader.effects:
