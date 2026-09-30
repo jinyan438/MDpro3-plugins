@@ -60,6 +60,7 @@ namespace MDPro3.Plugins.Features.StoryMode
     [Serializable]
     public sealed class StoryDeck
     {
+        public string name = "";
         public List<int> main = new List<int>();
         public List<int> extra = new List<int>();
         public List<int> side = new List<int>();
@@ -95,6 +96,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         }
         public StoryDeck Copy() => new StoryDeck
         {
+            name = name,
             main = new List<int>(main), extra = new List<int>(extra), side = new List<int>(side),
             mainRarities = new List<StoryRarity>(mainRarities), extraRarities = new List<StoryRarity>(extraRarities),
             sideRarities = new List<StoryRarity>(sideRarities)

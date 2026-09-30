@@ -105,14 +105,16 @@ namespace MDPro3.Plugins.Features.StoryMode
                 button.gameObject.name = "Difficulty" + difficulty;
                 if (hasDeck && difficulty != level) button.targetGraphic.color = StoryUI.Configured;
             }
-            StoryUI.Text(detail, (ready ? level + "级卡组：" + enemy.main.Count + " 张主卡" : level + "级卡组：尚未配置")
-                + "  |  已配置 " + configured + "/10  |  战胜 " + wins + " 次",
-                .04f, .125f, .92f, .047f, 20, TextAlignmentOptions.Center);
-            StoryUI.Button(detail, "编辑 " + level + "级卡组 · 全卡库", .06f, .065f, .88f, .052f,
+            StoryUI.Text(detail, ready ? level + "级卡组：「" + StoryDeckEditor.GetDeckName(enemy, selected, level) + "」"
+                : level + "级卡组：尚未配置", .04f, .128f, .92f, .036f, 19, TextAlignmentOptions.Center);
+            StoryUI.Text(detail, (ready ? enemy.main.Count + " 张主卡  |  " : string.Empty)
+                + "已配置 " + configured + "/10  |  战胜 " + wins + " 次",
+                .04f, .103f, .92f, .022f, 15, TextAlignmentOptions.Center);
+            StoryUI.Button(detail, "编辑 " + level + "级卡组 · 全卡库", .06f, .05f, .88f, .043f,
                 () => owner.EditDeck(selected, level));
             StoryUI.Button(detail, ready ? "挑战 " + level + "级 · 胜利 +" + owner.Rules.WinReward(level) + " DP"
                     : "请先配置 " + level + "级卡组",
-                .06f, .006f, .88f, .052f, () => owner.Challenge(selected, level), true).interactable = ready;
+                .06f, .002f, .88f, .043f, () => owner.Challenge(selected, level), true).interactable = ready;
         }
 
         internal void ShowConnecting(string name, int level)

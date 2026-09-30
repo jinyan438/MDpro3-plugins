@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using MDPro3.Duel.YGOSharp;
 using MDPro3.Net;
 using MDPro3.Servant;
@@ -26,9 +27,12 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal bool HandTestStarted;
         internal bool SelectingDeckSource;
         internal readonly StoryRarityEditor Rarities;
+        internal string DeckName { get; private set; }
         private bool deckSourcePickerEntered;
         private bool deckSourceDraftDirty;
         private int onlineDeckLoadGeneration;
+        private TMP_InputField deckNameInput;
+        private UnityEngine.Events.UnityAction<string> deckNameChanged;
         private readonly Deck previousDeck;
         private readonly string previousName, previousOnlineId, previousPack;
         private readonly bool previousLocal;
@@ -68,11 +72,11 @@ namespace MDPro3.Plugins.Features.StoryMode
                 throw new InvalidOperationException("故事模式编辑器接入尚未编译，请重建插件后再试。");
             var draft = Character == null ? Owner.Store.Current.player
                 : Owner.Store.Current.TryGetOpponent(Character, Level, out var saved) ? saved : new StoryDeck();
+            DeckName = Character == null ? "故事模式 · 我的卡组" : GetDeckName(draft, Character, Level);
             Active = this;
             DeckEditor.condition = DeckEditor.Condition.EditDeck;
             DeckEditor.Deck = ToGame(draft);
-            DeckEditor.DeckName = Character == null ? "故事模式 · 我的卡组"
-                : "故事模式 · " + CharacterSelector.characters.GetName(Character) + " · " + Level + "级";
+            DeckEditor.DeckName = DeckName;
             DeckEditor.DeckIsFromLocal = true;
             DeckEditor.onlineDeckID = null;
             DeckEditor.historyCards = new List<int>();
@@ -121,6 +125,7 @@ namespace MDPro3.Plugins.Features.StoryMode
         internal void Restore()
         {
             if (Active != this) return;
+            DetachDeckNameInput();
             Active = null;
             DeckEditor.Deck = previousDeck; DeckEditor.DeckName = previousName;
             DeckEditor.DeckIsFromLocal = previousLocal; DeckEditor.condition = previousCondition;
@@ -145,6 +150,19 @@ namespace MDPro3.Plugins.Features.StoryMode
         {
             if (!view.deckLoaded) return false;
             var deck = FromGame(view.FromObjectDeckToCodedDeck());
+            if (Character != null)
+            {
+                string name = (deckNameInput == null ? DeckEditor.DeckName : deckNameInput.text) ?? string.Empty;
+                name = name.Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    MessageManager.Toast("卡组名不能为空。");
+                    return false;
+                }
+                DeckName = name;
+                DeckEditor.DeckName = name;
+                deck.name = name;
+            }
             if (!Owner.SaveDeck(Character, Level, deck)) return false;
             // Separate objects: native YDKE import mutates DeckView.Deck before printing.
             view.Deck = ToGame(deck); DeckEditor.Deck = ToGame(deck);
@@ -170,6 +188,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             deckSourceDraftDirty = view.GetDirty();
             var currentDraft = view.FromObjectDeckToCodedDeck();
             if (currentDraft != null) DeckEditor.Deck = currentDraft;
+            DetachDeckNameInput();
             UI = null;
             SelectingDeckSource = true;
             deckSourcePickerEntered = false;
@@ -179,7 +198,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             Program.instance.ShiftToServant(Program.instance.deckSelector);
         }
 
-        internal bool ImportDeck(Deck source)
+        internal bool ImportDeck(Deck source, string sourceName = null)
         {
             if (Character == null || DeckEditor.Deck == null || source == null) return false;
             var draft = new Deck
@@ -191,13 +210,13 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (deckSourceDraftDirty)
             {
                 UIManager.ShowPopupYesOrNo(new List<string> { "导入卡组", "导入会替换当前未保存的修改，是否继续？", "导入", "取消" },
-                    () => ImportDeckNow(draft), null);
+                    () => ImportDeckNow(draft, sourceName), null);
                 return true;
             }
-            return ImportDeckNow(draft);
+            return ImportDeckNow(draft, sourceName);
         }
 
-        private bool ImportDeckNow(Deck draft)
+        private bool ImportDeckNow(Deck draft, string sourceName)
         {
             if (!AllowedDraft(draft, false)) return false;
             var story = Rarities.Import(draft);
@@ -206,9 +225,85 @@ namespace MDPro3.Plugins.Features.StoryMode
             current.Extra = new List<int>(draft.Extra ?? new List<int>());
             current.Side = new List<int>(draft.Side ?? new List<int>());
             Rarities.Remember(current, story);
+            SetDeckName(string.IsNullOrWhiteSpace(sourceName) ? DeckName : sourceName.Trim());
             MessageManager.Toast("卡组已载入角色卡组草稿；保存后生效。");
             Program.instance.ShiftToServant(Program.instance.deckEditor);
             return true;
+        }
+
+        private static string DefaultDeckName(string character, int level)
+        {
+            return character == null ? "故事模式 · 我的卡组"
+                : CharacterSelector.characters.GetName(character) + " " + level + "级卡组";
+        }
+
+        internal static string GetDeckName(StoryDeck deck, string character, int level)
+        {
+            string name = deck?.name?.Trim();
+            return string.IsNullOrEmpty(name) ? DefaultDeckName(character, level) : name;
+        }
+
+        internal void SetDeckName(string value)
+        {
+            DeckName = string.IsNullOrWhiteSpace(value) ? DefaultDeckName(Character, Level) : value.Trim();
+            DeckEditor.DeckName = DeckName;
+            if (deckNameInput != null && deckNameInput.text != DeckName) deckNameInput.text = DeckName;
+        }
+
+        internal void ConfigureDeckNameInput(DeckEditorUI ui, TMP_InputField input)
+        {
+            DetachDeckNameInput();
+            deckNameInput = input;
+            DeckEditor.DeckName = DeckName;
+            input.readOnly = Character == null;
+            input.text = DeckName;
+            if (Character == null) return;
+            input.characterLimit = 80;
+            deckNameChanged = value =>
+            {
+                DeckName = value ?? string.Empty;
+                DeckEditor.DeckName = DeckName;
+                if (ui != null && ui.DeckView != null) ui.DeckView.SetDirty(true);
+            };
+            input.onValueChanged.AddListener(deckNameChanged);
+        }
+
+        private void DetachDeckNameInput()
+        {
+            if (deckNameInput != null && deckNameChanged != null)
+                deckNameInput.onValueChanged.RemoveListener(deckNameChanged);
+            deckNameInput = null;
+            deckNameChanged = null;
+        }
+
+        private static string ReadStringMember(object value, params string[] names)
+        {
+            if (value == null) return null;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.IgnoreCase;
+            var type = value.GetType();
+            foreach (string name in names)
+            {
+                try
+                {
+                    var field = type.GetField(name, flags);
+                    if (field != null && field.GetValue(value) is string fieldValue && !string.IsNullOrWhiteSpace(fieldValue))
+                        return fieldValue.Trim();
+                    var property = type.GetProperty(name, flags);
+                    if (property != null && property.CanRead && property.GetIndexParameters().Length == 0
+                        && property.GetValue(value, null) is string propertyValue && !string.IsNullOrWhiteSpace(propertyValue))
+                        return propertyValue.Trim();
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        internal static string ReadOnlineSelectionName(SelectionToggle_DeckOnline item)
+        {
+            string name = ReadStringMember(item, "deckName", "deck_name", "title", "deckTitle", "deck_title");
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+            return item.GetComponentsInChildren<TMP_Text>(true).Select(text => text.text?.Trim())
+                .Where(text => !string.IsNullOrWhiteSpace(text)).OrderByDescending(text => text.Length).FirstOrDefault();
         }
 
         internal void AddDeckFromClipboard()
@@ -249,7 +344,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             MessageManager.Toast("角色卡组码已复制。");
         }
 
-        internal IEnumerator LoadOnlineDeck(string deckId)
+        internal IEnumerator LoadOnlineDeck(string deckId, string selectedName)
         {
             int generation = ++onlineDeckLoadGeneration;
             var task = OnlineDeck.GetDeck(deckId);
@@ -262,7 +357,11 @@ namespace MDPro3.Plugins.Features.StoryMode
                 MessageManager.Cast("网络异常，获取在线卡组失败。");
                 yield break;
             }
-            try { ImportDeck(new Deck(task.Result.deckYdk, string.Empty)); }
+            try
+            {
+                string name = ReadStringMember(task.Result, "deckName", "deck_name", "name", "title", "deckTitle", "deck_title");
+                ImportDeck(new Deck(task.Result.deckYdk, string.Empty), name ?? selectedName);
+            }
             catch (Exception ex)
             {
                 MessageManager.Cast("在线卡组数据无法读取。");
@@ -303,7 +402,7 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (selector.decks == null || !selector.decks.TryGetValue(item.deckName, out var deck))
                 MessageManager.Cast("无法读取所选卡组。");
             else
-                session.ImportDeck(deck);
+                session.ImportDeck(deck, item.deckName);
             return true;
         }
 
@@ -313,7 +412,8 @@ namespace MDPro3.Plugins.Features.StoryMode
             if (session?.SelectingDeckSource != true || session.Character == null) return false;
             if (item == null || string.IsNullOrWhiteSpace(item.deckId)) return true;
             MessageManager.Cast("正在读取在线卡组……");
-            Program.instance.onlineDeckViewer.StartCoroutine(session.LoadOnlineDeck(item.deckId));
+            Program.instance.onlineDeckViewer.StartCoroutine(session.LoadOnlineDeck(item.deckId,
+                StoryDeckEditor.ReadOnlineSelectionName(item)));
             return true;
         }
 
@@ -525,7 +625,9 @@ namespace MDPro3.Plugins.Features.StoryMode
                     () => {
                         var original = session.Character == null ? session.Owner.Store.Current.player
                             : session.Owner.Store.Current.TryGetOpponent(session.Character, session.Level, out var saved) ? saved : new StoryDeck();
-                        ui.DeckView.PrintDeck(StoryDeckEditor.ToGame(original), DeckEditor.DeckName, DeckView.Condition.Editable);
+                        session.SetDeckName(session.Character == null ? session.DeckName
+                            : StoryDeckEditor.GetDeckName(original, session.Character, session.Level));
+                        ui.DeckView.PrintDeck(StoryDeckEditor.ToGame(original), session.DeckName, DeckView.Condition.Editable);
                     }, ui.OnRandom, () => ui.DeckView.ClearDeck(),
                     () => ui.DeckView.ImportCardLists(StoryDeckEditor.ToGame(StoryCatalog.Starter())),
                     () => UIManager.ShowPopupYdke(() => ui.DeckView.ImportCardLists(YdkeConverter.Ydke2Deck(GUIUtility.systemCopyBuffer)),
@@ -539,10 +641,10 @@ namespace MDPro3.Plugins.Features.StoryMode
             var session = StoryDeckEditor.Active;
             if (session?.Owns(ui) != true) return;
             session.UI = ui;
-            // Keep the native layout, making the story save destination visible and immutable.
+            // Keep the native layout and bind the editable title to this story deck record.
             var name = ui.DeckView.GetComponent<YgomSystem.ElementSystem.ElementObjectManager>()
                 .GetNestedElement<TMP_InputField>("HeaderArea/InputField");
-            name.readOnly = true;
+            session.ConfigureDeckNameInput(ui, name);
             if (session.Character == null)
                 ui.DeckView.ButtonDeck.gameObject.SetActive(false);
             else
